@@ -1,18 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ErrorBanner } from "@/components/shared/ErrorBanner";
-import {
-  AlertTriangle,
-  Loader2,
-  PanelRightOpen,
-  Play,
-  Square,
-  Terminal,
-  Trash2,
-  Zap,
-} from "lucide-react";
+import { AlertTriangle, Loader2, Play, Square, Terminal, Trash2, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { Server } from "@moor/types";
 import type { ServerAction } from "@/hooks/server-patch-utils";
@@ -188,7 +179,6 @@ function ServerControls({
   onStop: (id: string) => Promise<void>;
   onRequestRemove: () => void;
 }) {
-  const navigate = useNavigate();
   const controlsDisabled = isBusy || isRemoving;
 
   return (
@@ -202,17 +192,6 @@ function ServerControls({
         onStart={onStart}
         onStop={onStop}
       />
-      <Button
-        variant="ghost"
-        size="icon"
-        className="text-[var(--fg-45)] hover:text-cursor-dark hover:bg-surface-400 active:bg-surface-500 transition-all duration-150"
-        disabled={controlsDisabled}
-        onClick={() => navigate(`/servers/${server.id}`)}
-        title="Server details"
-        aria-label={`Open details for ${server.name}`}
-      >
-        <PanelRightOpen className="h-4 w-4" />
-      </Button>
       <Button
         variant="ghost"
         size="icon"
@@ -303,6 +282,7 @@ export function ServerCard({
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const navigate = useNavigate();
   const isRunning = server.status === "running";
   const isError = server.status === "error";
   const isStarting = server.status === "starting" || action === "starting";
@@ -315,6 +295,21 @@ export function ServerCard({
     isRemoving,
     removeError,
   });
+
+  const navigationBlocked = removeFeedback !== null;
+
+  const handleCardClick = () => {
+    if (navigationBlocked) return;
+    navigate(`/servers/${server.id}`);
+  };
+
+  const handleCardKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (navigationBlocked) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      navigate(`/servers/${server.id}`);
+    }
+  };
 
   const handleRemove = async () => {
     setIsRemoving(true);
@@ -336,8 +331,13 @@ export function ServerCard({
 
   return (
     <Card
+      role="link"
+      tabIndex={0}
+      aria-label={`Open ${server.name}`}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
       className={cn(
-        "group transition-all duration-200 hover:shadow-[rgba(0,0,0,0.04)_0px_12px_40px,rgba(0,0,0,0.02)_0px_0px_16px]",
+        "group cursor-pointer transition-all duration-200 hover:shadow-[rgba(0,0,0,0.04)_0px_12px_40px,rgba(0,0,0,0.02)_0px_0px_16px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cursor-orange/60",
         !isCompact &&
           isSorting &&
           "shadow-[rgba(0,0,0,0.08)_0px_18px_44px] ring-1 ring-cursor-orange/20",

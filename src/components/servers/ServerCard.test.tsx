@@ -131,4 +131,24 @@ describe("ServerCard click-to-details", () => {
     });
     expect(location()).toBe("/servers/s1");
   });
+
+  it("does not navigate when the stop button is clicked", () => {
+    const { container, location, click } = mountCard(baseServer);
+    click(container.querySelector('[title="Stop server"]'));
+    expect(location()).toBe("/servers");
+  });
+
+  it("does not navigate during remove confirmation", () => {
+    const { container, location, click } = mountCard(baseServer);
+    click(container.querySelector('[title="Remove server"]'));
+    // 确认行已出现；此时点击卡片不应跳转
+    click(container.querySelector('[role="link"]'));
+    expect(location()).toBe("/servers");
+  });
+
+  it("does not navigate when the drag handle is clicked", () => {
+    const { container, location, click } = mountCard(baseServer, true);
+    click(container.querySelector('[title="Reorder My Server"]'));
+    expect(location()).toBe("/servers");
+  });
 });

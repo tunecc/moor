@@ -182,7 +182,10 @@ function ServerControls({
   const controlsDisabled = isBusy || isRemoving;
 
   return (
-    <div className="flex items-center gap-1 shrink-0 bg-surface-300/50 rounded-lg p-1">
+    <div
+      className="flex items-center gap-1 shrink-0 bg-surface-300/50 rounded-lg p-1"
+      onClick={(e) => e.stopPropagation()}
+    >
       <LifecycleButton
         serverId={server.id}
         isRunning={server.status === "running"}
@@ -225,6 +228,7 @@ function RemoveFeedbackRow({
         "mt-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 animate-fade-in",
         isError ? "border-error-warm/15 bg-error-warm/8" : "border-gold/15 bg-gold/8",
       )}
+      onClick={(e) => e.stopPropagation()}
     >
       <div className="flex min-w-0 items-center gap-2">
         {isRemoving ? (
@@ -351,7 +355,11 @@ export function ServerCard({
         <div>
           <div className={cn("flex items-center justify-between", isCompact ? "gap-2" : "gap-3")}>
             <div className={cn("flex items-center min-w-0 flex-1", isCompact ? "gap-2" : "gap-3")}>
-              {!isCompact && dragHandle}
+              {!isCompact && (
+                <span onClick={(e) => e.stopPropagation()} className="shrink-0">
+                  {dragHandle}
+                </span>
+              )}
               <ServerAvatar isRunning={isRunning} isError={isError} compact={isCompact} />
               <ServerIdentity
                 server={server}

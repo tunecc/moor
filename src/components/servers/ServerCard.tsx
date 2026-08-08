@@ -45,6 +45,7 @@ function getRemoveFeedback({
 interface ServerCardProps {
   server: Server;
   action?: ServerAction;
+  variant?: "full" | "compact";
   dragHandle?: ReactNode;
   isSorting?: boolean;
   onStart: (id: string) => Promise<void>;
@@ -58,11 +59,20 @@ function getCommandPreview(server: Server): string {
     : server.url || "";
 }
 
-function ServerAvatar({ isRunning, isError }: { isRunning: boolean; isError: boolean }) {
+function ServerAvatar({
+  isRunning,
+  isError,
+  compact = false,
+}: {
+  isRunning: boolean;
+  isError: boolean;
+  compact?: boolean;
+}) {
   return (
     <div
       className={cn(
-        "h-10 w-10 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-200",
+        "rounded-xl flex items-center justify-center shrink-0 transition-colors duration-200",
+        compact ? "h-8 w-8" : "h-10 w-10",
         isRunning
           ? "bg-success-muted/10 text-success-muted border border-success-muted/20"
           : isError
@@ -70,7 +80,7 @@ function ServerAvatar({ isRunning, isError }: { isRunning: boolean; isError: boo
             : "bg-surface-300 text-[var(--fg-35)] border border-[var(--fg-08)]",
       )}
     >
-      <Terminal className="h-[18px] w-[18px]" />
+      <Terminal className={compact ? "h-4 w-4" : "h-[18px] w-[18px]"} />
     </div>
   );
 }
@@ -79,10 +89,12 @@ function ServerIdentity({
   server,
   commandPreview,
   displayStatus,
+  compact = false,
 }: {
   server: Server;
   commandPreview: string;
   displayStatus: string;
+  compact?: boolean;
 }) {
   return (
     <div className="min-w-0 flex-1">
@@ -98,7 +110,14 @@ function ServerIdentity({
         <StatusBadge status={displayStatus} />
       </div>
       {commandPreview && (
-        <p className="font-mono text-[11px] text-[var(--fg-40)] truncate">{commandPreview}</p>
+        <p
+          className={cn(
+            "font-mono text-[var(--fg-40)] truncate",
+            compact ? "text-[10px]" : "text-[11px]",
+          )}
+        >
+          {commandPreview}
+        </p>
       )}
     </div>
   );
@@ -273,12 +292,14 @@ function RemoveFeedbackRow({
 export function ServerCard({
   server,
   action,
+  variant = "full",
   dragHandle,
   isSorting,
   onStart,
   onStop,
   onRemove,
 }: ServerCardProps) {
+  const isCompact = variant === "compact";
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -317,23 +338,26 @@ export function ServerCard({
     <Card
       className={cn(
         "group transition-all duration-200 hover:shadow-[rgba(0,0,0,0.04)_0px_12px_40px,rgba(0,0,0,0.02)_0px_0px_16px]",
-        isSorting && "shadow-[rgba(0,0,0,0.08)_0px_18px_44px] ring-1 ring-cursor-orange/20",
+        !isCompact &&
+          isSorting &&
+          "shadow-[rgba(0,0,0,0.08)_0px_18px_44px] ring-1 ring-cursor-orange/20",
         isRunning && !isStopping && "bg-success-muted/[0.02] border-success-muted/10",
         isError && "bg-error-warm/[0.02] border-error-warm/10",
         isStarting && "bg-gold/[0.02] border-gold/10",
         isStopping && "bg-gold/[0.02] border-gold/10",
       )}
     >
-      <CardContent className="p-4">
+      <CardContent className={isCompact ? "p-3" : "p-4"}>
         <div>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              {dragHandle}
-              <ServerAvatar isRunning={isRunning} isError={isError} />
+          <div className={cn("flex items-center justify-between", isCompact ? "gap-2" : "gap-3")}>
+            <div className={cn("flex items-center min-w-0 flex-1", isCompact ? "gap-2" : "gap-3")}>
+              {!isCompact && dragHandle}
+              <ServerAvatar isRunning={isRunning} isError={isError} compact={isCompact} />
               <ServerIdentity
                 server={server}
                 commandPreview={commandPreview}
                 displayStatus={displayStatus}
+                compact={isCompact}
               />
             </div>
             <ServerControls

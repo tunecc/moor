@@ -107,7 +107,7 @@ function ServerIdentity({
             <Zap className="h-3 w-3 text-gold" />
           </span>
         )}
-        <StatusBadge status={displayStatus} />
+        {!compact && <StatusBadge status={displayStatus} />}
       </div>
       {commandPreview && (
         <p

@@ -1,6 +1,7 @@
 import { Search, X, List, LayoutGrid } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { ServerViewMode } from "@/hooks/useServerViewPreferences";
 
 interface ServersToolbarProps {
@@ -44,31 +45,41 @@ export function ServersToolbar({
           </Button>
         ) : null}
       </div>
-      <div className="flex items-center gap-1">
-        <Button
+      <div
+        role="group"
+        aria-label="Server view"
+        className="inline-flex h-9 items-center rounded-lg border border-[var(--fg-10)] bg-transparent p-0.5"
+      >
+        <button
           type="button"
-          size="icon"
-          className="h-9 w-9"
-          variant={viewMode === "list" ? "default" : "outline"}
           aria-pressed={viewMode === "list"}
           aria-label="List view"
           title="List view"
           onClick={() => onViewModeChange("list")}
+          className={cn(
+            "flex h-8 flex-1 items-center justify-center rounded-md px-2.5 transition-colors",
+            viewMode === "list"
+              ? "bg-cursor-orange text-surface-200"
+              : "bg-transparent text-[var(--fg-40)] hover:bg-[var(--fg-06)]",
+          )}
         >
           <List className="h-4 w-4" />
-        </Button>
-        <Button
+        </button>
+        <button
           type="button"
-          size="icon"
-          className="h-9 w-9"
-          variant={viewMode === "grid" ? "default" : "outline"}
           aria-pressed={viewMode === "grid"}
           aria-label="Grid view"
           title="Grid view"
           onClick={() => onViewModeChange("grid")}
+          className={cn(
+            "flex h-8 flex-1 items-center justify-center rounded-md px-2.5 transition-colors",
+            viewMode === "grid"
+              ? "bg-cursor-orange text-surface-200"
+              : "bg-transparent text-[var(--fg-40)] hover:bg-[var(--fg-06)]",
+          )}
         >
           <LayoutGrid className="h-4 w-4" />
-        </Button>
+        </button>
       </div>
     </div>
   );

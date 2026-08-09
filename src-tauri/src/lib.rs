@@ -7,11 +7,7 @@ use std::{
         Arc,
     },
 };
-use tauri::{
-    menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
-    Manager, RunEvent, State,
-};
+use tauri::{Manager, RunEvent, State};
 
 mod login_autostart;
 mod sidecar;
@@ -52,10 +48,12 @@ struct MoorState {
     inner: Arc<MoorInner>,
 }
 
+#[allow(dead_code)] // consumed by later tray tasks
 struct MoorInner {
     port: u16,
     api_token: String,
     db: Arc<sidecar::db::Database>,
+    server_manager: Arc<sidecar::services::server_manager::ServerManager>,
     minimize_to_tray: AtomicBool,
     hide_dock_icon_on_close: AtomicBool,
 }
@@ -109,7 +107,7 @@ fn apply_autostart_setting(app: &tauri::AppHandle, enabled: bool) -> Result<(), 
     }
 }
 
-fn show_main_window(app: &tauri::AppHandle) {
+pub(crate) fn show_main_window(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     let _ = app.set_dock_visibility(true);
 
@@ -275,6 +273,7 @@ pub fn run() {
                     port,
                     api_token,
                     db: db_arc.clone(),
+                    server_manager: server_manager.clone(),
                     minimize_to_tray: AtomicBool::new(minimize_to_tray),
                     hide_dock_icon_on_close: AtomicBool::new(hide_dock_icon_on_close),
                 }),
@@ -301,40 +300,13 @@ pub fn run() {
 
             let _ = apply_autostart_setting(app.handle(), auto_start);
 
-            // Tray menu
-            let quit = MenuItem::with_id(app, "quit", "Quit Moor", true, None::<&str>)?;
-            let show = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quit])?;
-            let _tray = {
-                let builder = TrayIconBuilder::new()
-                    .menu(&menu)
-                    .show_menu_on_left_click(false)
-                    .tooltip("Moor - MCP Manager")
-                    .on_menu_event(|app, event| match event.id.as_ref() {
-                        "quit" => {
-                            app.exit(0);
-                        }
-                        "show" => {
-                            show_main_window(app);
-                        }
-                        _ => {}
-                    });
-
-                #[cfg(target_os = "macos")]
-                {
-                    builder
-                        .icon(tauri::include_image!("./icons/tray-template.png"))
-                        .icon_as_template(true)
-                        .build(app)?
-                }
-
-                #[cfg(not(target_os = "macos"))]
-                {
-                    builder
-                        .icon(tauri::include_image!("./icons/32x32.png"))
-                        .build(app)?
-                }
-            };
+            // Tray menu (dynamic menu + left-click window toggle)
+            crate::tray::setup(
+                app.handle(),
+                db_arc.clone(),
+                event_bus.clone(),
+                server_manager.clone(),
+            )?;
 
             if should_show_window {
                 show_main_window(app.handle());
@@ -409,13 +381,20 @@ mod tests {
 
     #[test]
     fn updates_minimize_to_tray_runtime_state() {
+        let db = Arc::new(
+            sidecar::db::Database::open(std::path::Path::new(":memory:"))
+                .expect("failed to open temp db"),
+        );
         let state = MoorState {
             inner: Arc::new(MoorInner {
                 port: 9223,
                 api_token: "token".to_string(),
-                db: Arc::new(
-                    sidecar::db::Database::open(std::path::Path::new(":memory:"))
-                        .expect("failed to open temp db"),
+                db: db.clone(),
+                server_manager: Arc::new(
+                    sidecar::services::server_manager::ServerManager::new(
+                        db.clone(),
+                        Arc::new(sidecar::services::event_bus::EventBus::new(8)),
+                    ),
                 ),
                 minimize_to_tray: AtomicBool::new(true),
                 hide_dock_icon_on_close: AtomicBool::new(false),
@@ -450,11 +429,18 @@ mod tests {
         )
         .expect("settings update should succeed");
 
+        let db = Arc::new(db);
         let state = MoorState {
             inner: Arc::new(MoorInner {
                 port: 9223,
                 api_token: "token".to_string(),
-                db: Arc::new(db),
+                db: db.clone(),
+                server_manager: Arc::new(
+                    sidecar::services::server_manager::ServerManager::new(
+                        db.clone(),
+                        Arc::new(sidecar::services::event_bus::EventBus::new(8)),
+                    ),
+                ),
                 minimize_to_tray: AtomicBool::new(true),
                 hide_dock_icon_on_close: AtomicBool::new(false),
             }),

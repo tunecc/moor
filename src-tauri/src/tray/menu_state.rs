@@ -97,9 +97,12 @@ pub fn build_tray_menu_state(db: &Database) -> Result<TrayMenuState, String> {
     let can_start_all = servers
         .iter()
         .any(|s| !matches!(s.status, ServerStatusKind::Running));
-    let can_stop_all = servers
-        .iter()
-        .any(|s| matches!(s.status, ServerStatusKind::Running | ServerStatusKind::Starting));
+    let can_stop_all = servers.iter().any(|s| {
+        matches!(
+            s.status,
+            ServerStatusKind::Running | ServerStatusKind::Starting
+        )
+    });
 
     Ok(TrayMenuState {
         active_profile_name,
@@ -241,10 +244,7 @@ mod tests {
     #[test]
     fn parses_known_and_rejects_unknown_action_ids() {
         let ids = vec!["server-a".to_string()];
-        assert_eq!(
-            parse_action("start-all", &ids),
-            Some(TrayAction::StartAll)
-        );
+        assert_eq!(parse_action("start-all", &ids), Some(TrayAction::StartAll));
         assert_eq!(
             parse_action("server:server-a", &ids),
             Some(TrayAction::ToggleServer("server-a".into()))

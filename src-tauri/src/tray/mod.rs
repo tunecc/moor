@@ -1,11 +1,12 @@
 use crate::sidecar::db::Database;
-use crate::sidecar::services::event_bus::EventBus;
+use crate::sidecar::services::event_bus::{EventBus, Evt};
 use crate::sidecar::services::server_manager::ServerManager;
 use crate::tray::menu_state::{build_tray_menu_state, ServerStatusKind, TrayMenuState};
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
+use tokio::sync::broadcast::error::RecvError;
 
 pub mod menu_state;
 
@@ -14,7 +15,7 @@ const TRAY_ID: &str = "moor-tray";
 pub fn setup(
     app: &AppHandle,
     db: Arc<Database>,
-    _event_bus: Arc<EventBus>,
+    event_bus: Arc<EventBus>,
     server_manager: Arc<ServerManager>,
 ) -> Result<(), String> {
     let builder = TrayIconBuilder::with_id(TRAY_ID)
@@ -84,13 +85,37 @@ pub fn setup(
         .build(app)
         .map_err(|e| e.to_string())?;
 
-    // Initial menu from persisted DB state. Task 4 replaces this once subscriptions land.
-    let state = build_tray_menu_state(&db)?;
-    let menu = build_menu(app, &state).map_err(|e| e.to_string())?;
-    app.tray_by_id(TRAY_ID)
-        .ok_or_else(|| "tray icon not found after setup".to_string())?
-        .set_menu(Some(menu))
-        .map_err(|e| e.to_string())?;
+    // Initial menu from persisted DB state. Built before the refresh loop so the
+    // tray is populated at startup; subsequent domain events keep it live.
+    rebuild_menu(app, &db)?;
+
+    // Subscribe to domain events and rebuild the tray menu on the main thread
+    // whenever a server/profile/settings event fires. Both `app` and `db` are
+    // `'static` (AppHandle + Arc<Database>), so the spawned task never borrows
+    // setup locals.
+    let mut rx = event_bus.subscribe();
+    let app_handle = app.clone();
+    let db_handle = db.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let should_refresh = match rx.recv().await {
+                Ok(event) => should_refresh_for_event(&event),
+                Err(RecvError::Lagged(_)) => true, // missed events → rebuild to converge
+                Err(RecvError::Closed) => break,
+            };
+            if !should_refresh {
+                continue;
+            }
+            let app = app_handle.clone();
+            let db = db_handle.clone();
+            let app_for_closure = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                if let Err(err) = rebuild_menu(&app_for_closure, &db) {
+                    eprintln!("Failed to rebuild tray menu: {err}");
+                }
+            });
+        }
+    });
 
     Ok(())
 }
@@ -134,14 +159,28 @@ pub(crate) fn build_menu(
     Ok(menu)
 }
 
-/// Rebuild the menu from live DB state. Task 4 uses this to refresh after events.
-#[allow(dead_code)] // consumed by the Task 4 refresh loop
-pub(crate) fn rebuild_menu(
-    app: &AppHandle,
-    db: &Database,
-) -> Result<Menu<tauri::Wry>, String> {
+/// Rebuild the tray menu from live DB state and apply it to the tray icon.
+/// Used both for the initial menu at setup and for every event-triggered refresh.
+pub(crate) fn rebuild_menu(app: &AppHandle, db: &Database) -> Result<(), String> {
     let state = build_tray_menu_state(db)?;
-    build_menu(app, &state).map_err(|e| e.to_string())
+    let menu = build_menu(app, &state).map_err(|e| e.to_string())?;
+    app.tray_by_id(TRAY_ID)
+        .ok_or_else(|| "tray icon not found".to_string())?
+        .set_menu(Some(menu))
+        .map_err(|e| e.to_string())
+}
+
+/// Decide whether a domain event should trigger a tray menu rebuild.
+/// All four `Evt` variants change tray-relevant state, so each returns `true`.
+/// The match is exhaustive so a future new `Evt` variant forces an explicit
+/// decision here rather than silently skipping a refresh.
+fn should_refresh_for_event(event: &Evt) -> bool {
+    match event {
+        Evt::ServerStatus { .. } => true,
+        Evt::ServerTools { .. } => true,
+        Evt::ProfileActivated { .. } => true,
+        Evt::SettingsChanged { .. } => true,
+    }
 }
 
 /// Show the main window when hidden, hide it when visible.
@@ -156,5 +195,29 @@ pub(crate) fn toggle_main_window(app: &AppHandle) {
         }
     } else {
         crate::show_main_window(app);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sidecar::services::event_bus::Evt;
+
+    #[test]
+    fn tray_refreshes_for_all_domain_events() {
+        assert!(should_refresh_for_event(&Evt::ServerStatus {
+            server_id: "s".into(),
+            status: "running".into(),
+            error_message: None,
+        }));
+        assert!(should_refresh_for_event(&Evt::ServerTools {
+            server_id: "s".into(),
+        }));
+        assert!(should_refresh_for_event(&Evt::ProfileActivated {
+            profile_id: "p".into(),
+        }));
+        assert!(should_refresh_for_event(&Evt::SettingsChanged {
+            settings: serde_json::json!({}),
+        }));
     }
 }

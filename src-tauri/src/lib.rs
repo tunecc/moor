@@ -390,12 +390,10 @@ mod tests {
                 port: 9223,
                 api_token: "token".to_string(),
                 db: db.clone(),
-                server_manager: Arc::new(
-                    sidecar::services::server_manager::ServerManager::new(
-                        db.clone(),
-                        Arc::new(sidecar::services::event_bus::EventBus::new(8)),
-                    ),
-                ),
+                server_manager: Arc::new(sidecar::services::server_manager::ServerManager::new(
+                    db.clone(),
+                    Arc::new(sidecar::services::event_bus::EventBus::new(8)),
+                )),
                 minimize_to_tray: AtomicBool::new(true),
                 hide_dock_icon_on_close: AtomicBool::new(false),
             }),
@@ -435,12 +433,10 @@ mod tests {
                 port: 9223,
                 api_token: "token".to_string(),
                 db: db.clone(),
-                server_manager: Arc::new(
-                    sidecar::services::server_manager::ServerManager::new(
-                        db.clone(),
-                        Arc::new(sidecar::services::event_bus::EventBus::new(8)),
-                    ),
-                ),
+                server_manager: Arc::new(sidecar::services::server_manager::ServerManager::new(
+                    db.clone(),
+                    Arc::new(sidecar::services::event_bus::EventBus::new(8)),
+                )),
                 minimize_to_tray: AtomicBool::new(true),
                 hide_dock_icon_on_close: AtomicBool::new(false),
             }),

@@ -2,10 +2,10 @@ use crate::sidecar::db::Database;
 use crate::sidecar::services::event_bus::{EventBus, Evt};
 use crate::sidecar::services::server_manager::ServerManager;
 use crate::tray::menu_state::{
-    build_tray_menu_state, parse_action, ServerStatusKind, TrayAction, TrayMenuState,
+    build_tray_menu_state, parse_action, TrayAction, TrayMenuState,
 };
 use std::sync::Arc;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 use tokio::sync::broadcast::error::RecvError;
@@ -154,13 +154,11 @@ pub(crate) fn build_menu(
         menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
     for server in &state.servers {
-        let heading = match server.status {
-            ServerStatusKind::Running | ServerStatusKind::Starting => "Stop",
-            _ => "Start",
-        };
-        let label = format!("{heading} {}", server.name);
-        let id = format!("server:{}", server.id);
-        let item = MenuItem::with_id(app, id, label, true, None::<&str>)?;
+        // Use a native checkmark (✓) to mark up servers. The label is just the
+        // server name — clicking toggles start/stop, same as before — so the
+        // verb prefix is dropped and the running state is visible at a glance.
+        let checked = server.status.is_active();
+        let item = CheckMenuItem::with_id(app, format!("server:{}", server.id), &server.name, true, checked, None::<&str>)?;
         menu.append(&item)?;
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;

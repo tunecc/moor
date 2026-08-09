@@ -52,6 +52,14 @@ impl TrayMenuState {
     }
 }
 
+impl ServerStatusKind {
+    /// Whether this status should render a checked (✓) marker in the tray menu.
+    /// Running and Starting both read as "up", so both are active.
+    pub fn is_active(&self) -> bool {
+        matches!(self, ServerStatusKind::Running | ServerStatusKind::Starting)
+    }
+}
+
 fn map_status(status: &str) -> ServerStatusKind {
     match status {
         "running" => ServerStatusKind::Running,
@@ -265,6 +273,14 @@ mod tests {
         assert_eq!(state.running_count, 0);
         assert!(!state.can_stop_all);
         assert!(state.can_start_all);
+    }
+
+    #[test]
+    fn active_status_kinds_are_running_and_starting() {
+        assert!(ServerStatusKind::Running.is_active());
+        assert!(ServerStatusKind::Starting.is_active());
+        assert!(!ServerStatusKind::Stopped.is_active());
+        assert!(!ServerStatusKind::Error.is_active());
     }
 
     #[test]

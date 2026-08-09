@@ -79,8 +79,11 @@ pub fn build_tray_menu_state(db: &Database) -> Result<TrayMenuState, String> {
     let active_profile_name = profile_repo.find_by_id(&active_id)?.map(|p| p.name);
 
     let ids = profile_repo.find_active_profile_server_ids()?;
-    let servers = server_repo
-        .find_by_ids(&ids)?
+    let mut servers = server_repo.find_by_ids(&ids)?;
+    // The menu lists servers by sort_order (ascending, default 0 when missing),
+    // matching ServerRepository::find_all, not the app_servers row order.
+    servers.sort_by_key(|s| s.sort_order.unwrap_or(0));
+    let servers = servers
         .into_iter()
         .map(|server| TrayServerItem {
             id: server.id,
@@ -171,9 +174,11 @@ mod tests {
     #[test]
     fn builds_only_enabled_servers_from_active_profile() {
         let db = setup_db();
-        insert_server(&db, "server-a", 0);
+        // Non-trivial sort_orders: find_by_ids returns row order (server-a first),
+        // but the menu must present them sorted by sort_order (server-b first).
+        insert_server(&db, "server-a", 10);
         insert_server(&db, "server-b", 1);
-        insert_server(&db, "server-c", 2);
+        insert_server(&db, "server-c", 5);
 
         assign_enabled(&db, &["server-a", "server-b"]);
         // server-c is a member of the active profile but disabled.
@@ -192,7 +197,8 @@ mod tests {
         assert!(ids.contains(&"server-b"));
         assert!(!ids.contains(&"server-c"));
         let names: Vec<&str> = state.servers.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names, vec!["server-a", "server-b"]);
+        // Sorted ascending by sort_order: server-b (1) before server-a (10).
+        assert_eq!(names, vec!["server-b", "server-a"]);
     }
 
     #[test]
@@ -225,6 +231,40 @@ mod tests {
         assert_eq!(all_running.running_count, 3);
         assert!(!all_running.can_start_all);
         assert!(all_running.can_stop_all);
+    }
+
+    #[test]
+    fn marks_starting_status_as_stop_able_and_start_able() {
+        let db = setup_db();
+        insert_server(&db, "server-a", 0);
+        assign_enabled(&db, &["server-a"]);
+        ServerRepository::new(&db)
+            .update_status("server-a", "starting", None)
+            .expect("set starting");
+
+        let state = build_tray_menu_state(&db).expect("failed to build tray state");
+        assert_eq!(state.total_count, 1);
+        assert_eq!(state.servers[0].status, ServerStatusKind::Starting);
+        assert!(state.can_stop_all, "starting counts as stop-able");
+        assert!(
+            state.can_start_all,
+            "starting is not Running, so start-all applies"
+        );
+    }
+
+    #[test]
+    fn all_stopped_servers_disallow_stop_all_but_allow_start_all() {
+        let db = setup_db();
+        insert_server(&db, "server-a", 0);
+        insert_server(&db, "server-b", 1);
+        assign_enabled(&db, &["server-a", "server-b"]);
+        // Default inserted status is "stopped".
+
+        let state = build_tray_menu_state(&db).expect("failed to build tray state");
+        assert_eq!(state.total_count, 2);
+        assert_eq!(state.running_count, 0);
+        assert!(!state.can_stop_all);
+        assert!(state.can_start_all);
     }
 
     #[test]

@@ -1,7 +1,9 @@
 use crate::sidecar::db::Database;
 use crate::sidecar::services::event_bus::{EventBus, Evt};
 use crate::sidecar::services::server_manager::ServerManager;
-use crate::tray::menu_state::{build_tray_menu_state, ServerStatusKind, TrayMenuState};
+use crate::tray::menu_state::{
+    build_tray_menu_state, parse_action, ServerStatusKind, TrayAction, TrayMenuState,
+};
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -23,40 +25,50 @@ pub fn setup(
         .tooltip("Moor - MCP Manager")
         .on_menu_event({
             let server_manager = server_manager.clone();
-            move |app, event| match event.id.as_ref() {
-                "show" => crate::show_main_window(app),
-                "quit" => app.exit(0),
-                "start-all" => {
-                    let sm = server_manager.clone();
-                    tauri::async_runtime::spawn(async move {
-                        sm.start_all_in_active_profile().await;
-                    });
+            let db = db.clone();
+            move |app, event| {
+                // Snapshot the current enabled in-active-profile server ids from the
+                // same DB the menu was built from. A small synchronous read per click
+                // keeps parse_action scoped: stale/unknown ids resolve to None.
+                let known_ids: Vec<String> = build_tray_menu_state(&db)
+                    .map(|state| state.servers.into_iter().map(|s| s.id).collect())
+                    .unwrap_or_default();
+                match parse_action(event.id.as_ref(), &known_ids) {
+                    Some(TrayAction::StartAll) => {
+                        let sm = server_manager.clone();
+                        tauri::async_runtime::spawn(async move {
+                            sm.start_all_in_active_profile().await;
+                        });
+                    }
+                    Some(TrayAction::StopAll) => {
+                        let sm = server_manager.clone();
+                        tauri::async_runtime::spawn(async move {
+                            sm.stop_all_in_active_profile().await;
+                        });
+                    }
+                    Some(TrayAction::ToggleServer(server_id)) => {
+                        let sm = server_manager.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let should_stop = matches!(
+                                sm.get_server(&server_id).await.map(|s| s.status),
+                                Some(status) if status == "running" || status == "starting"
+                            );
+                            let result = if should_stop {
+                                sm.stop_server(&server_id).await
+                            } else {
+                                sm.start_server(&server_id).await
+                            };
+                            if let Err(e) = result {
+                                eprintln!("tray server action failed: {e}");
+                            }
+                        });
+                    }
+                    None => match event.id.as_ref() {
+                        "show" => crate::show_main_window(app),
+                        "quit" => app.exit(0),
+                        _ => {}
+                    },
                 }
-                "stop-all" => {
-                    let sm = server_manager.clone();
-                    tauri::async_runtime::spawn(async move {
-                        sm.stop_all_in_active_profile().await;
-                    });
-                }
-                raw if raw.starts_with("server:") => {
-                    let server_id = raw.trim_start_matches("server:").to_string();
-                    let sm = server_manager.clone();
-                    tauri::async_runtime::spawn(async move {
-                        let should_stop = matches!(
-                            sm.get_server(&server_id).await.map(|s| s.status),
-                            Some(status) if status == "running" || status == "starting"
-                        );
-                        let result = if should_stop {
-                            sm.stop_server(&server_id).await
-                        } else {
-                            sm.start_server(&server_id).await
-                        };
-                        if let Err(e) = result {
-                            eprintln!("tray server action failed: {e}");
-                        }
-                    });
-                }
-                _ => {}
             }
         })
         .on_tray_icon_event(|tray, event| {

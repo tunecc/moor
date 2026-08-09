@@ -48,12 +48,10 @@ struct MoorState {
     inner: Arc<MoorInner>,
 }
 
-#[allow(dead_code)] // consumed by later tray tasks
 struct MoorInner {
     port: u16,
     api_token: String,
     db: Arc<sidecar::db::Database>,
-    server_manager: Arc<sidecar::services::server_manager::ServerManager>,
     minimize_to_tray: AtomicBool,
     hide_dock_icon_on_close: AtomicBool,
 }
@@ -273,7 +271,6 @@ pub fn run() {
                     port,
                     api_token,
                     db: db_arc.clone(),
-                    server_manager: server_manager.clone(),
                     minimize_to_tray: AtomicBool::new(minimize_to_tray),
                     hide_dock_icon_on_close: AtomicBool::new(hide_dock_icon_on_close),
                 }),
@@ -390,10 +387,6 @@ mod tests {
                 port: 9223,
                 api_token: "token".to_string(),
                 db: db.clone(),
-                server_manager: Arc::new(sidecar::services::server_manager::ServerManager::new(
-                    db.clone(),
-                    Arc::new(sidecar::services::event_bus::EventBus::new(8)),
-                )),
                 minimize_to_tray: AtomicBool::new(true),
                 hide_dock_icon_on_close: AtomicBool::new(false),
             }),
@@ -433,10 +426,6 @@ mod tests {
                 port: 9223,
                 api_token: "token".to_string(),
                 db: db.clone(),
-                server_manager: Arc::new(sidecar::services::server_manager::ServerManager::new(
-                    db.clone(),
-                    Arc::new(sidecar::services::event_bus::EventBus::new(8)),
-                )),
                 minimize_to_tray: AtomicBool::new(true),
                 hide_dock_icon_on_close: AtomicBool::new(false),
             }),

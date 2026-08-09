@@ -15,6 +15,7 @@ use tauri::{
 
 mod login_autostart;
 mod sidecar;
+mod tray;
 
 const LEGACY_BUNDLE_IDENTIFIER: &str = "dev.moor.app";
 const AUTOSTART_ARG: &str = "--moor-autostart";

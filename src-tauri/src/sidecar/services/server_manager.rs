@@ -414,6 +414,20 @@ impl ServerManager {
         }
     }
 
+    pub async fn start_all_in_active_profile(&self) {
+        let ids = ProfileRepository::new(&self.db)
+            .find_active_profile_server_ids()
+            .unwrap_or_default();
+        let _ = futures::future::join_all(ids.iter().map(|id| self.start_server(id))).await;
+    }
+
+    pub async fn stop_all_in_active_profile(&self) {
+        let ids = ProfileRepository::new(&self.db)
+            .find_active_profile_server_ids()
+            .unwrap_or_default();
+        let _ = futures::future::join_all(ids.iter().map(|id| self.stop_server(id))).await;
+    }
+
     pub async fn call_tool(&self, exposed_name: &str, args: Value) -> Result<Value, String> {
         let catalog = self.get_tool_catalog(None).await;
         let owner = catalog
@@ -1672,6 +1686,56 @@ process.stdin.on("data", (chunk) => {{
             .await
             .expect("server present");
         assert_eq!(stopped.status, "stopped");
+
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+    #[tokio::test]
+    async fn batch_start_stop_respects_active_profile() {
+        // 插入两个 server 到活跃 Profile,再插入一个不加入任何 Profile 的 server。
+        // start_all/stop_all 应只影响活跃 Profile 的 server;未挂 Profile 的 server 保持 stopped。
+        let data_dir = temp_data_dir("batch-active-profile");
+        std::fs::create_dir_all(&data_dir).expect("failed to create temp dir");
+
+        let (connector, _connect_calls) = FakeConnector::new();
+        let (db, manager) = build_manager_with_fake_connector(&data_dir, Arc::new(connector));
+
+        let active_a = uuid::Uuid::new_v4().to_string();
+        let active_b = uuid::Uuid::new_v4().to_string();
+        let inactive = uuid::Uuid::new_v4().to_string();
+        insert_stdio_server(&db, &active_a, "active-a", "unused-a".into(), false, 0);
+        insert_stdio_server(&db, &active_b, "active-b", "unused-b".into(), false, 1);
+        insert_stdio_server(&db, &inactive, "inactive", "unused-c".into(), false, 2);
+
+        ProfileRepository::new(&db)
+            .assign_to_active_profile(&[active_a.clone(), active_b.clone()])
+            .expect("failed to assign servers");
+
+        manager.load_from_db().await;
+
+        manager.start_all_in_active_profile().await;
+        assert_eq!(
+            manager.get_server(&active_a).await.unwrap().status,
+            "running"
+        );
+        assert_eq!(
+            manager.get_server(&active_b).await.unwrap().status,
+            "running"
+        );
+        assert_eq!(
+            manager.get_server(&inactive).await.unwrap().status,
+            "stopped"
+        );
+
+        manager.stop_all_in_active_profile().await;
+        assert_eq!(
+            manager.get_server(&active_a).await.unwrap().status,
+            "stopped"
+        );
+        assert_eq!(
+            manager.get_server(&active_b).await.unwrap().status,
+            "stopped"
+        );
 
         let _ = std::fs::remove_dir_all(data_dir);
     }

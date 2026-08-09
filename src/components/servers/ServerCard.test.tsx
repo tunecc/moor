@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -23,6 +23,15 @@ const baseServer: Server = {
 };
 
 const noop = async () => undefined;
+
+const mountedCards: Array<{ root: ReturnType<typeof createRoot>; container: HTMLDivElement }> = [];
+
+afterEach(() => {
+  for (const { root, container } of mountedCards.splice(0)) {
+    act(() => root.unmount());
+    container.remove();
+  }
+});
 
 function LocationProbe() {
   return <span data-testid="location">{useLocation().pathname}</span>;
@@ -61,6 +70,7 @@ function mountCard(server: Server, withDragHandle = false) {
       el?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
   };
+  mountedCards.push({ root, container });
   return { container, root, location, click };
 }
 
@@ -132,9 +142,33 @@ describe("ServerCard click-to-details", () => {
     expect(location()).toBe("/servers/s1");
   });
 
+  it("navigates to the detail page on Space key", () => {
+    const { container, location } = mountCard(baseServer);
+    act(() => {
+      container
+        .querySelector('[role="link"]')
+        ?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }),
+        );
+    });
+    expect(location()).toBe("/servers/s1");
+  });
+
   it("does not navigate when the stop button is clicked", () => {
     const { container, location, click } = mountCard(baseServer);
     click(container.querySelector('[title="Stop server"]'));
+    expect(location()).toBe("/servers");
+  });
+
+  it("does not navigate when Enter is pressed on a control button", () => {
+    const { container, location } = mountCard(baseServer);
+    act(() => {
+      container
+        .querySelector('[title="Stop server"]')
+        ?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+        );
+    });
     expect(location()).toBe("/servers");
   });
 

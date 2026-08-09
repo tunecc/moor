@@ -307,7 +307,9 @@ export function ServerCard({
     navigate(`/servers/${server.id}`);
   };
 
+  // Only handle card-level keys when the card itself is focused; inner controls own their key events.
   const handleCardKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return; // inner controls handle their own keys
     if (navigationBlocked) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();

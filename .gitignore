@@ -53,6 +53,7 @@ AGENTS.md
 .mcp.json
 
 .tmp/
+.worktrees/
 docs/specs/*
 
 .gitnexus

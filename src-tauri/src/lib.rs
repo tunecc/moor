@@ -106,7 +106,8 @@ fn apply_autostart_setting(app: &tauri::AppHandle, enabled: bool) -> Result<(), 
 }
 
 pub(crate) fn show_main_window(app: &tauri::AppHandle) {
-    set_dock_visibility(app, true);
+    #[cfg(target_os = "macos")]
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -126,16 +127,21 @@ pub(crate) fn hide_main_window(app: &tauri::AppHandle) {
         .try_state::<MoorState>()
         .map(|state| state.get_hide_dock_icon_on_close())
         .unwrap_or(false);
-    set_dock_visibility(app, !hide_dock);
+    if hide_dock {
+        #[cfg(target_os = "macos")]
+        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+    }
 }
 
 #[cfg(target_os = "macos")]
-fn set_dock_visibility(app: &tauri::AppHandle, visible: bool) {
-    let _ = app.set_dock_visibility(visible);
+fn set_initial_dock_visibility(app: &tauri::AppHandle, hide_dock_icon_on_close: bool) {
+    if hide_dock_icon_on_close {
+        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
-fn set_dock_visibility(_app: &tauri::AppHandle, _visible: bool) {}
+fn set_initial_dock_visibility(_app: &tauri::AppHandle, _hide_dock_icon_on_close: bool) {}
 
 fn sync_runtime_settings_from_db(
     state: &MoorState,
@@ -330,8 +336,7 @@ pub fn run() {
             if should_show_window {
                 show_main_window(app.handle());
             } else if minimize_to_tray && hide_dock_icon_on_close {
-                #[cfg(target_os = "macos")]
-                let _ = app.handle().set_dock_visibility(false);
+                set_initial_dock_visibility(app.handle(), hide_dock_icon_on_close);
             }
 
             Ok(())

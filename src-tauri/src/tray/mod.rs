@@ -200,9 +200,7 @@ pub(crate) fn toggle_main_window(app: &AppHandle) {
         .map(|window| window.is_visible().unwrap_or(false))
         .unwrap_or(false);
     if visible {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.hide();
-        }
+        crate::hide_main_window(app);
     } else {
         crate::show_main_window(app);
     }

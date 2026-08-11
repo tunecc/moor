@@ -106,14 +106,36 @@ fn apply_autostart_setting(app: &tauri::AppHandle, enabled: bool) -> Result<(), 
 }
 
 pub(crate) fn show_main_window(app: &tauri::AppHandle) {
-    #[cfg(target_os = "macos")]
-    let _ = app.set_dock_visibility(true);
+    set_dock_visibility(app, true);
 
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
     }
 }
+
+/// Hide the main window and, when the "Hide Dock Icon on Close" setting is
+/// enabled, hide the macOS Dock icon too. Both the tray left-click toggle and
+/// the window close button route through here so the Dock state stays
+/// consistent with a single code path.
+pub(crate) fn hide_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+    let hide_dock = app
+        .try_state::<MoorState>()
+        .map(|state| state.get_hide_dock_icon_on_close())
+        .unwrap_or(false);
+    set_dock_visibility(app, !hide_dock);
+}
+
+#[cfg(target_os = "macos")]
+fn set_dock_visibility(app: &tauri::AppHandle, visible: bool) {
+    let _ = app.set_dock_visibility(visible);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_dock_visibility(_app: &tauri::AppHandle, _visible: bool) {}
 
 fn sync_runtime_settings_from_db(
     state: &MoorState,
@@ -335,13 +357,7 @@ pub fn run() {
                 let state = app_handle.state::<MoorState>();
                 if state.get_minimize_to_tray() {
                     api.prevent_close();
-                    if let Some(window) = app_handle.get_webview_window("main") {
-                        let _ = window.hide();
-                    }
-                    if state.get_hide_dock_icon_on_close() {
-                        #[cfg(target_os = "macos")]
-                        let _ = app_handle.set_dock_visibility(false);
-                    }
+                    hide_main_window(app_handle);
                 }
             }
             _ => {}

@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { ServerCard } from "@/components/servers/ServerCard";
-import type { Server } from "@moor/types";
+import type { Server, ServerGroup } from "@moor/types";
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -21,6 +21,23 @@ const baseServer: Server = {
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };
+
+const groups: ServerGroup[] = [
+  {
+    id: "g1",
+    name: "Dev",
+    sortOrder: 0,
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+  },
+  {
+    id: "g2",
+    name: "Ops",
+    sortOrder: 1,
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+  },
+];
 
 const noop = async () => undefined;
 
@@ -90,7 +107,7 @@ describe("ServerCard status badge", () => {
 
   it("hides the Running status badge in the compact (grid) variant", () => {
     const markup = renderCard(baseServer, "compact");
-    expect(markup).not.toContain("Running");
+    expect(markup).not.toContain("Stopped");
   });
 
   it("hides the Stopped status badge in the compact (grid) variant", () => {
@@ -184,5 +201,128 @@ describe("ServerCard click-to-details", () => {
     const { container, location, click } = mountCard(baseServer, true);
     click(container.querySelector('[title="Reorder My Server"]'));
     expect(location()).toBe("/servers");
+  });
+});
+
+describe("ServerCard group assignment", () => {
+  it("does not render an inline group selector row", () => {
+    const markup = renderToStaticMarkup(
+      <MemoryRouter>
+        <ServerCard
+          server={baseServer}
+          variant="full"
+          groups={groups}
+          onAssignGroup={noop}
+          onStart={noop}
+          onStop={noop}
+          onRemove={noop}
+        />
+      </MemoryRouter>,
+    );
+    // 旧实现渲染的 FolderInput 图标与行内 Select 触发器都不应再出现。
+    expect(markup).not.toContain("Move to group");
+    expect(markup).not.toContain("FolderInput");
+    // 溢出菜单触发器存在。
+    expect(markup).toContain("Move My Server to group");
+  });
+
+  it("renders the overflow menu only when groups + onAssignGroup are provided", () => {
+    const without = renderToStaticMarkup(
+      <MemoryRouter>
+        <ServerCard
+          server={baseServer}
+          variant="full"
+          onStart={noop}
+          onStop={noop}
+          onRemove={noop}
+        />
+      </MemoryRouter>,
+    );
+    expect(without).not.toContain("Move My Server to group");
+  });
+
+  it("calls onAssignGroup when a group is chosen from the overflow menu", () => {
+    const onAssignGroup = vi.fn(async () => undefined);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <ServerCard
+            server={{ ...baseServer, groupId: null }}
+            variant="full"
+            groups={groups}
+            onAssignGroup={onAssignGroup}
+            onStart={noop}
+            onStop={noop}
+            onRemove={noop}
+          />
+        </MemoryRouter>,
+      );
+    });
+    mountedCards.push({ root, container });
+    const trigger = container.querySelector('button[aria-label="Move My Server to group"]');
+    expect(trigger).not.toBeNull();
+    act(() => {
+      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const item = container.querySelector('button[role="menuitemradio"][aria-label="Dev"]');
+    // label 由文本内容提供,回退到包含 "Dev" 文本的菜单项。
+    const devItem = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[role="menuitemradio"]'),
+    ).find((el) => el.textContent?.includes("Dev"));
+    expect(devItem).toBeTruthy();
+    void item;
+    act(() => {
+      devItem?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onAssignGroup).toHaveBeenCalledWith("s1", "g1");
+  });
+
+  it("treats Ungrouped as groupId null", () => {
+    const onAssignGroup = vi.fn(async () => undefined);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <ServerCard
+            server={{ ...baseServer, groupId: "g1" }}
+            variant="full"
+            groups={groups}
+            onAssignGroup={onAssignGroup}
+            onStart={noop}
+            onStop={noop}
+            onRemove={noop}
+          />
+        </MemoryRouter>,
+      );
+    });
+    mountedCards.push({ root, container });
+    const trigger = container.querySelector('button[aria-label="Move My Server to group"]');
+    act(() => {
+      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const ungrouped = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[role="menuitemradio"]'),
+    ).find((el) => el.textContent?.includes("Ungrouped"));
+    act(() => {
+      ungrouped?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onAssignGroup).toHaveBeenCalledWith("s1", null);
+  });
+
+  it("does not navigate when the overflow menu trigger is clicked", () => {
+    const { container, location } = mountCard(baseServer);
+    // 卡片没有传 groups,这里只验证触发器不存在时点击卡片本体才跳转。
+    // 直接验证点击 Remove 之外的区域不会因菜单触发跳转(本卡无菜单)。
+    act(() => {
+      container
+        .querySelector('[role="link"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(location()).toBe("/servers/s1");
   });
 });

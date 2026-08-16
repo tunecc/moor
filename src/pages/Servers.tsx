@@ -14,8 +14,10 @@ import { useConfigImport } from "@/hooks/useConfigImport";
 import { useServerViewPreferences } from "@/hooks/useServerViewPreferences";
 import { filterServersByName } from "@/lib/server-list";
 import { partitionServersByGroup } from "@/lib/server-groups";
+import { closestCenter, DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { FileJson, Plus, RefreshCw, ScanSearch, Search } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
+import { UNGROUPED_ID } from "@/hooks/useServerGroups";
 import { AddServerForm } from "./servers/AddServerForm";
 import { ConfigImportPanel } from "./servers/ConfigImportPanel";
 
@@ -101,6 +103,26 @@ export function Servers() {
       await updateServer({ id: serverId, updates: { groupId } });
     },
     [updateServer],
+  );
+
+  // 跨分区拖拽:落到分区头 droppable(`group:<id>`)时,把被拖 server 移到目标组。
+  // 空组或折叠分区没有内部 sortable 项,只有这个 droppable 作为落点。
+  const handleSectionDrop = useCallback(
+    (event: DragEndEvent) => {
+      const activeId = String(event.active.id);
+      const overId = event.over?.id ? String(event.over?.id) : null;
+      if (!overId || activeId === overId) return;
+      if (!overId.startsWith("group:")) return;
+      const targetPartitionId = overId.slice("group:".length);
+      const targetGroupId = targetPartitionId === UNGROUPED_ID ? null : targetPartitionId;
+      const active = servers.find((s) => s.id === activeId);
+      if (!active) return;
+      if ((active.groupId ?? null) === targetGroupId) return;
+      void handleAssignGroup(activeId, targetGroupId).catch((err) => {
+        setOrderError(getErrorMessage(err, "Unable to move server"));
+      });
+    },
+    [servers, handleAssignGroup],
   );
 
   return (
@@ -212,76 +234,85 @@ export function Servers() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {partitions.map((partition, index) => (
-                  <ServerGroupSection
-                    key={partition.id}
-                    id={partition.id}
-                    name={partition.name}
-                    isUngrouped={partition.isUngrouped}
-                    count={partition.servers.length}
-                    collapsed={isCollapsed(partition.id)}
-                    canMoveUp={index > 0}
-                    canMoveDown={index < partitions.length - 1}
-                    onToggleCollapse={() => toggleCollapsed(partition.id)}
-                    onRename={async (name) => {
-                      try {
-                        await renameGroup({ id: partition.id, name });
-                      } catch (err) {
-                        setOrderError(
-                          err instanceof Error ? err.message : "Unable to rename group",
-                        );
-                        throw err;
-                      }
-                    }}
-                    onDelete={async () => {
-                      try {
-                        await deleteGroup(partition.id);
-                      } catch (err) {
-                        setOrderError(
-                          err instanceof Error ? err.message : "Unable to delete group",
-                        );
-                        throw err;
-                      }
-                    }}
-                    onMoveUp={() => void handleMoveGroup(index, -1)}
-                    onMoveDown={() => void handleMoveGroup(index, 1)}
-                  >
-                    {partition.servers.length === 0 ? (
-                      <p className="px-2 py-3 font-body text-xs text-[var(--fg-35)]">
-                        No servers in this group.
-                      </p>
-                    ) : viewMode === "list" ? (
-                      <ServerListView
-                        servers={partition.servers}
-                        allServers={servers}
-                        groupId={partition.isUngrouped ? undefined : partition.id}
-                        serverActions={serverActions}
-                        groups={groups}
-                        onAssignGroup={handleAssignGroup}
-                        onStart={startServer}
-                        onStop={stopServer}
-                        onRemove={removeServer}
-                        onReorder={async (next) => {
-                          setOrderError(null);
-                          await reorderServers(next);
-                        }}
-                        onReorderError={(message) => setOrderError(message)}
-                      />
-                    ) : (
-                      <ServerGridView
-                        servers={partition.servers}
-                        serverActions={serverActions}
-                        groups={groups}
-                        onAssignGroup={handleAssignGroup}
-                        onStart={startServer}
-                        onStop={stopServer}
-                        onRemove={removeServer}
-                      />
-                    )}
-                  </ServerGroupSection>
-                ))}
-              </div>
+              <DndContext collisionDetection={closestCenter} onDragEnd={handleSectionDrop}>
+                <div className="space-y-4">
+                  {partitions.map((partition, index) => (
+                    <ServerGroupSection
+                      key={partition.id}
+                      id={partition.id}
+                      name={partition.name}
+                      isUngrouped={partition.isUngrouped}
+                      count={partition.servers.length}
+                      collapsed={isCollapsed(partition.id)}
+                      canMoveUp={index > 0}
+                      canMoveDown={index < partitions.length - 1}
+                      onToggleCollapse={() => toggleCollapsed(partition.id)}
+                      onRename={async (name) => {
+                        try {
+                          await renameGroup({ id: partition.id, name });
+                        } catch (err) {
+                          setOrderError(
+                            err instanceof Error ? err.message : "Unable to rename group",
+                          );
+                          throw err;
+                        }
+                      }}
+                      onDelete={async () => {
+                        try {
+                          await deleteGroup(partition.id);
+                        } catch (err) {
+                          setOrderError(
+                            err instanceof Error ? err.message : "Unable to delete group",
+                          );
+                          throw err;
+                        }
+                      }}
+                      onMoveUp={() => void handleMoveGroup(index, -1)}
+                      onMoveDown={() => void handleMoveGroup(index, 1)}
+                    >
+                      {partition.servers.length === 0 ? (
+                        <p className="px-2 py-3 font-body text-xs text-[var(--fg-35)]">
+                          No servers in this group — drag one here.
+                        </p>
+                      ) : viewMode === "list" ? (
+                        <ServerListView
+                          servers={partition.servers}
+                          allServers={servers}
+                          groupId={partition.isUngrouped ? undefined : partition.id}
+                          serverActions={serverActions}
+                          groups={groups}
+                          onAssignGroup={handleAssignGroup}
+                          onStart={startServer}
+                          onStop={stopServer}
+                          onRemove={removeServer}
+                          onReorder={async (next) => {
+                            setOrderError(null);
+                            await reorderServers(next);
+                          }}
+                          onReorderError={(message) => setOrderError(message)}
+                        />
+                      ) : (
+                        <ServerGridView
+                          servers={partition.servers}
+                          allServers={servers}
+                          groupId={partition.isUngrouped ? undefined : partition.id}
+                          serverActions={serverActions}
+                          groups={groups}
+                          onAssignGroup={handleAssignGroup}
+                          onStart={startServer}
+                          onStop={stopServer}
+                          onRemove={removeServer}
+                          onReorder={async (next) => {
+                            setOrderError(null);
+                            await reorderServers(next);
+                          }}
+                          onReorderError={(message) => setOrderError(message)}
+                        />
+                      )}
+                    </ServerGroupSection>
+                  ))}
+                </div>
+              </DndContext>
             )}
           </>
         )}

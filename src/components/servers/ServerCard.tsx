@@ -1,20 +1,13 @@
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ErrorBanner } from "@/components/shared/ErrorBanner";
+import { OverflowMenu, type OverflowMenuItem } from "@/components/shared/OverflowMenu";
 import {
   AlertTriangle,
-  FolderInput,
   Loader2,
+  MoreVertical,
   Play,
   Square,
   Terminal,
@@ -60,7 +53,7 @@ interface ServerCardProps {
   onStart: (id: string) => Promise<void>;
   onStop: (id: string) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
-  /** Available groups + handler; when provided, the card shows a "move to group" control. */
+  /** Available groups + handler; when provided, the card shows a "move to group" overflow menu. */
   groups?: ServerGroup[];
   onAssignGroup?: (serverId: string, groupId: string | null) => Promise<void>;
 }
@@ -181,6 +174,35 @@ function LifecycleButton({
   );
 }
 
+function buildGroupMenuItems({
+  groups,
+  currentGroupId,
+  onPick,
+}: {
+  groups: ServerGroup[];
+  currentGroupId: string | null;
+  onPick: (groupId: string | null) => void;
+}): OverflowMenuItem[] {
+  const ungroupedSelected = currentGroupId === null;
+  const items: OverflowMenuItem[] = [
+    {
+      key: UNGROUPED_ID,
+      label: "Ungrouped",
+      selected: ungroupedSelected,
+      onSelect: () => onPick(null),
+    },
+  ];
+  for (const g of groups) {
+    items.push({
+      key: g.id,
+      label: g.name,
+      selected: g.id === currentGroupId,
+      onSelect: () => onPick(g.id),
+    });
+  }
+  return items;
+}
+
 function ServerControls({
   server,
   isStarting,
@@ -190,6 +212,9 @@ function ServerControls({
   onStart,
   onStop,
   onRequestRemove,
+  groups,
+  onAssignGroup,
+  assigningGroup,
 }: {
   server: Server;
   isStarting: boolean;
@@ -199,13 +224,26 @@ function ServerControls({
   onStart: (id: string) => Promise<void>;
   onStop: (id: string) => Promise<void>;
   onRequestRemove: () => void;
+  groups?: ServerGroup[];
+  onAssignGroup?: (serverId: string, groupId: string | null) => Promise<void>;
+  assigningGroup: boolean;
 }) {
   const controlsDisabled = isBusy || isRemoving;
+  const showGroupMenu = !!groups && !!onAssignGroup;
+  const menuItems = showGroupMenu
+    ? buildGroupMenuItems({
+        groups: groups as ServerGroup[],
+        currentGroupId: server.groupId ?? null,
+        onPick: (groupId) => void onAssignGroup?.(server.id, groupId),
+      })
+    : [];
 
   return (
     <div
       className="flex items-center gap-1 shrink-0 bg-surface-300/50 rounded-lg p-1"
       onClick={(e) => e.stopPropagation()}
+      // 阻止容器捕获键盘事件冒泡到卡片(避免触发卡片 Enter/Space 跳转)。
+      onKeyDown={(e) => e.stopPropagation()}
     >
       <LifecycleButton
         serverId={server.id}
@@ -227,6 +265,21 @@ function ServerControls({
       >
         {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
       </Button>
+      {showGroupMenu && (
+        <OverflowMenu
+          triggerLabel={`Move ${server.name} to group`}
+          triggerIcon={
+            assigningGroup ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <MoreVertical className="h-4 w-4" />
+            )
+          }
+          disabled={assigningGroup || controlsDisabled}
+          items={menuItems}
+          triggerClassName="h-9 w-9"
+        />
+      )}
     </div>
   );
 }
@@ -360,22 +413,20 @@ export function ServerCard({
     setRemoveError(null);
   };
 
-  const handleAssignGroup = async (groupId: string) => {
+  const handleAssignGroup = async (groupId: string | null) => {
     if (!onAssignGroup) return;
-    const target = groupId === UNGROUPED_ID ? null : groupId;
-    if ((server.groupId ?? null) === target) return;
+    if ((server.groupId ?? null) === groupId) return;
     setAssigningGroup(true);
     setAssignError(null);
     try {
-      await onAssignGroup(server.id, target);
+      await onAssignGroup(server.id, groupId);
     } catch (err) {
       setAssignError(getErrorMessage(err, "Unable to move server"));
     } finally {
       setAssigningGroup(false);
     }
   };
-
-  const currentGroupValue = server.groupId ?? UNGROUPED_ID;
+  void handleAssignGroup;
 
   return (
     <Card
@@ -424,40 +475,11 @@ export function ServerCard({
                 setConfirmingRemove(true);
                 setRemoveError(null);
               }}
+              groups={groups}
+              onAssignGroup={onAssignGroup}
+              assigningGroup={assigningGroup}
             />
           </div>
-          {groups && onAssignGroup && (
-            <div
-              className={cn("mt-2 flex items-center gap-2", isCompact ? "text-[11px]" : "text-xs")}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <FolderInput
-                className={cn(
-                  "shrink-0 text-[var(--fg-40)]",
-                  isCompact ? "h-3 w-3" : "h-3.5 w-3.5",
-                )}
-              />
-              <Select
-                value={currentGroupValue}
-                onValueChange={(v) => void handleAssignGroup(v)}
-                disabled={assigningGroup}
-              >
-                <SelectTrigger className="h-7 w-auto min-w-[8rem] gap-1 px-2 py-0 text-[11px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={UNGROUPED_ID}>Ungrouped</SelectItem>
-                  {groups.length > 0 && <SelectSeparator />}
-                  {groups.map((g) => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {assigningGroup && <Loader2 className="h-3 w-3 animate-spin text-[var(--fg-40)]" />}
-            </div>
-          )}
           {assignError && <ErrorBanner message={assignError} variant="mono" className="mt-2" />}
           {removeFeedback && (
             <RemoveFeedbackRow

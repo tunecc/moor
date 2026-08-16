@@ -11,6 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useDroppable } from "@dnd-kit/core";
 import { ChevronDown, ChevronRight, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ServerGroup } from "@moor/types";
@@ -29,6 +30,25 @@ interface ServerGroupSectionProps {
   onMoveUp: () => void;
   onMoveDown: () => void;
   children: ReactNode;
+}
+
+/**
+ * 空组或折叠分区的可落点区域:作为跨组拖拽的目标。
+ * droppableId 形如 `group:<id>`(具名组)或 `group:__ungrouped__`。
+ */
+function GroupDropArea({ droppableId, children }: { droppableId: string; children: ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: droppableId });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "rounded-lg transition-colors",
+        isOver ? "bg-cursor-orange/[0.04] ring-1 ring-cursor-orange/20" : "bg-transparent",
+      )}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function ServerGroupSection({
@@ -100,57 +120,67 @@ export function ServerGroupSection({
         <span className="font-headline text-sm font-medium text-cursor-dark truncate">{name}</span>
         <span className="text-xs text-[var(--fg-40)] tabular-nums">{count}</span>
 
-        <div className="ml-auto flex items-center gap-0.5">
+        <div className="ml-auto flex items-center gap-1">
           {!isUngrouped && (
             <>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
+                className="h-9 w-9"
                 disabled={!canMoveUp}
                 onClick={onMoveUp}
                 title={`Move ${name} up`}
                 aria-label={`Move ${name} up`}
               >
-                <ArrowUp className="h-3.5 w-3.5" />
+                <ArrowUp className="h-5 w-5" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
+                className="h-9 w-9"
                 disabled={!canMoveDown}
                 onClick={onMoveDown}
                 title={`Move ${name} down`}
                 aria-label={`Move ${name} down`}
               >
-                <ArrowDown className="h-3.5 w-3.5" />
+                <ArrowDown className="h-5 w-5" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
+                className="h-9 w-9"
                 onClick={startRename}
                 title={`Rename ${name}`}
                 aria-label={`Rename ${name}`}
               >
-                <Pencil className="h-3.5 w-3.5" />
+                <Pencil className="h-5 w-5" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-[var(--fg-45)] hover:text-error-warm hover:bg-error-warm/10"
+                className="h-9 w-9 text-[var(--fg-45)] hover:text-error-warm hover:bg-error-warm/10"
                 onClick={() => setDeleteOpen(true)}
                 title={`Delete ${name}`}
                 aria-label={`Delete ${name}`}
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="h-5 w-5" />
               </Button>
             </>
           )}
         </div>
       </div>
 
-      {!collapsed && <div className="pl-1">{children}</div>}
+      {collapsed ? (
+        <GroupDropArea droppableId={`group:${id}`}>
+          <p className="px-3 py-2 font-body text-xs text-[var(--fg-35)]">
+            {count === 0
+              ? "Empty group — drag a server here."
+              : `${count} server${count === 1 ? "" : "s"} (collapsed)`}
+          </p>
+        </GroupDropArea>
+      ) : (
+        <div className="pl-1">{children}</div>
+      )}
 
       {/* Rename dialog */}
       <AlertDialog open={renameOpen} onOpenChange={setRenameOpen}>

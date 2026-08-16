@@ -74,3 +74,8 @@ sidecar/dist/
 sidecar/node_modules/
 ~/.moor/
 .gitnexus
+# >>> Comet managed project state >>>
+!/.comet/
+/.comet/*
+!/.comet/config.yaml
+# <<< Comet managed project state <<<

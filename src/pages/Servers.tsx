@@ -6,10 +6,14 @@ import { PageLoading } from "@/components/shared/PageLoading";
 import { ServersToolbar } from "@/components/servers/ServersToolbar";
 import { ServerListView } from "@/components/servers/ServerListView";
 import { ServerGridView } from "@/components/servers/ServerGridView";
+import { ServerGroupSection } from "@/components/servers/ServerGroupSection";
 import { useServers } from "@/hooks/useServers";
+import { useServerGroups } from "@/hooks/useServerGroups";
+import { useCollapsedGroups } from "@/hooks/useCollapsedGroups";
 import { useConfigImport } from "@/hooks/useConfigImport";
 import { useServerViewPreferences } from "@/hooks/useServerViewPreferences";
 import { filterServersByName } from "@/lib/server-list";
+import { partitionServersByGroup } from "@/lib/server-groups";
 import { FileJson, Plus, RefreshCw, ScanSearch, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddServerForm } from "./servers/AddServerForm";
@@ -26,7 +30,19 @@ export function Servers() {
     addServer,
     refresh,
     serverActions,
+    updateServer,
   } = useServers();
+  const {
+    groups,
+    loading: groupsLoading,
+    createGroup,
+    renameGroup,
+    deleteGroup,
+    reorderGroups,
+    createError,
+    renameError,
+  } = useServerGroups();
+  const { isCollapsed, toggle: toggleCollapsed } = useCollapsedGroups();
   const [showAdd, setShowAdd] = useState(false);
   const [showJsonImport, setShowJsonImport] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -37,6 +53,11 @@ export function Servers() {
   const filteredServers = useMemo(
     () => filterServersByName(servers, searchQuery),
     [servers, searchQuery],
+  );
+
+  const partitions = useMemo(
+    () => partitionServersByGroup(filteredServers, groups),
+    [filteredServers, groups],
   );
 
   const showToolbar = !loading && servers.length > 0;
@@ -56,6 +77,31 @@ export function Servers() {
     setShowJsonImport(false);
     void importState.scan();
   }, [importState]);
+
+  const handleMoveGroup = useCallback(
+    async (index: number, direction: -1 | 1) => {
+      const target = index + direction;
+      if (target < 0 || target >= groups.length) return;
+      // Ungrouped 分区不参与排序;具名分组都在 partitions 开头且与 groups 顺序一致。
+      const next = [...groups];
+      const [moved] = next.splice(index, 1);
+      if (!moved) return;
+      next.splice(target, 0, moved);
+      try {
+        await reorderGroups(next);
+      } catch (err) {
+        setOrderError(err instanceof Error ? err.message : "Unable to reorder groups");
+      }
+    },
+    [groups, reorderGroups],
+  );
+
+  const handleAssignGroup = useCallback(
+    async (serverId: string, groupId: string | null) => {
+      await updateServer({ id: serverId, updates: { groupId } });
+    },
+    [updateServer],
+  );
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -80,6 +126,19 @@ export function Servers() {
               <ScanSearch className="h-4 w-4 mr-2" /> Scan Configs
             </Button>
             <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await createGroup("New Group");
+                } catch (err) {
+                  setOrderError(err instanceof Error ? err.message : "Unable to create group");
+                }
+              }}
+              disabled={groupsLoading}
+            >
+              <Plus className="h-4 w-4 mr-2" /> Add Group
+            </Button>
+            <Button
               onClick={() => {
                 setShowJsonImport(false);
                 setShowAdd(true);
@@ -102,6 +161,8 @@ export function Servers() {
       {showAdd && <AddServerForm onAdd={handleAdd} onClose={() => setShowAdd(false)} />}
 
       {orderError && <ErrorBanner message={orderError} className="animate-fade-in" />}
+      {createError && <ErrorBanner message={createError} className="animate-fade-in" />}
+      {renameError && <ErrorBanner message={renameError} className="animate-fade-in" />}
 
       {/* Server List */}
       <div className="space-y-2">
@@ -144,28 +205,83 @@ export function Servers() {
                   Clear search
                 </Button>
               </div>
-            ) : viewMode === "list" ? (
-              <ServerListView
-                servers={filteredServers}
-                allServers={servers}
-                serverActions={serverActions}
-                onStart={startServer}
-                onStop={stopServer}
-                onRemove={removeServer}
-                onReorder={async (next) => {
-                  setOrderError(null);
-                  await reorderServers(next);
-                }}
-                onReorderError={(message) => setOrderError(message)}
-              />
+            ) : partitions.length === 0 ? (
+              <div className="py-10 text-center">
+                <p className="font-body text-sm text-[var(--fg-35)]">
+                  No groups yet. Create one below to organize your servers.
+                </p>
+              </div>
             ) : (
-              <ServerGridView
-                servers={filteredServers}
-                serverActions={serverActions}
-                onStart={startServer}
-                onStop={stopServer}
-                onRemove={removeServer}
-              />
+              <div className="space-y-4">
+                {partitions.map((partition, index) => (
+                  <ServerGroupSection
+                    key={partition.id}
+                    id={partition.id}
+                    name={partition.name}
+                    isUngrouped={partition.isUngrouped}
+                    count={partition.servers.length}
+                    collapsed={isCollapsed(partition.id)}
+                    canMoveUp={index > 0}
+                    canMoveDown={index < partitions.length - 1}
+                    onToggleCollapse={() => toggleCollapsed(partition.id)}
+                    onRename={async (name) => {
+                      try {
+                        await renameGroup({ id: partition.id, name });
+                      } catch (err) {
+                        setOrderError(
+                          err instanceof Error ? err.message : "Unable to rename group",
+                        );
+                        throw err;
+                      }
+                    }}
+                    onDelete={async () => {
+                      try {
+                        await deleteGroup(partition.id);
+                      } catch (err) {
+                        setOrderError(
+                          err instanceof Error ? err.message : "Unable to delete group",
+                        );
+                        throw err;
+                      }
+                    }}
+                    onMoveUp={() => void handleMoveGroup(index, -1)}
+                    onMoveDown={() => void handleMoveGroup(index, 1)}
+                  >
+                    {partition.servers.length === 0 ? (
+                      <p className="px-2 py-3 font-body text-xs text-[var(--fg-35)]">
+                        No servers in this group.
+                      </p>
+                    ) : viewMode === "list" ? (
+                      <ServerListView
+                        servers={partition.servers}
+                        allServers={servers}
+                        groupId={partition.isUngrouped ? undefined : partition.id}
+                        serverActions={serverActions}
+                        groups={groups}
+                        onAssignGroup={handleAssignGroup}
+                        onStart={startServer}
+                        onStop={stopServer}
+                        onRemove={removeServer}
+                        onReorder={async (next) => {
+                          setOrderError(null);
+                          await reorderServers(next);
+                        }}
+                        onReorderError={(message) => setOrderError(message)}
+                      />
+                    ) : (
+                      <ServerGridView
+                        servers={partition.servers}
+                        serverActions={serverActions}
+                        groups={groups}
+                        onAssignGroup={handleAssignGroup}
+                        onStart={startServer}
+                        onStop={stopServer}
+                        onRemove={removeServer}
+                      />
+                    )}
+                  </ServerGroupSection>
+                ))}
+              </div>
             )}
           </>
         )}

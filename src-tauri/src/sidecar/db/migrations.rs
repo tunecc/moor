@@ -69,6 +69,14 @@ pub fn run_migrations(db: &Database) -> Result<(), String> {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL,
             updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS server_groups (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
         );",
     )?;
 
@@ -86,7 +94,12 @@ pub fn run_migrations(db: &Database) -> Result<(), String> {
         "sort_order",
         "INTEGER NOT NULL DEFAULT 0",
     )?;
+    ensure_column(db, "mcp_servers", "group_id", "TEXT")?;
     backfill_server_sort_order(db)?;
+
+    db.exec(
+        "CREATE INDEX IF NOT EXISTS idx_mcp_servers_group_id ON mcp_servers(group_id);",
+    )?;
 
     Ok(())
 }

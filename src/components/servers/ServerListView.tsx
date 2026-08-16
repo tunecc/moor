@@ -20,7 +20,7 @@ import { ServerCard } from "@/components/servers/ServerCard";
 import { getReorderedServers, getServerIds } from "@/lib/server-list";
 import { cn, getErrorMessage } from "@/lib/utils";
 import { GripVertical } from "lucide-react";
-import type { Server } from "@moor/types";
+import type { Server, ServerGroup } from "@moor/types";
 import type { ServerAction } from "@/hooks/server-patch-utils";
 
 interface ServerListViewProps {
@@ -34,6 +34,11 @@ interface ServerListViewProps {
   onRemove: (id: string) => Promise<void>;
   onReorder: (nextServers: Server[]) => Promise<void>;
   onReorderError: (message: string) => void;
+  /** Optional group id; when provided, reorder is scoped to that group's servers. */
+  groupId?: string;
+  /** Available groups + handler passed through to each card's move-to-group control. */
+  groups?: ServerGroup[];
+  onAssignGroup?: (serverId: string, groupId: string | null) => Promise<void>;
 }
 
 function SortableServerCard({
@@ -42,12 +47,16 @@ function SortableServerCard({
   onStart,
   onStop,
   onRemove,
+  groups,
+  onAssignGroup,
 }: {
   server: Server;
   action: ServerAction | undefined;
   onStart: (id: string) => Promise<void>;
   onStop: (id: string) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
+  groups?: ServerGroup[];
+  onAssignGroup?: (serverId: string, groupId: string | null) => Promise<void>;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: server.id,
@@ -64,6 +73,8 @@ function SortableServerCard({
         server={server}
         action={action}
         isSorting={isDragging}
+        groups={groups}
+        onAssignGroup={onAssignGroup}
         dragHandle={
           <Button
             variant="ghost"
@@ -94,6 +105,9 @@ export function ServerListView({
   onRemove,
   onReorder,
   onReorderError,
+  groupId,
+  groups,
+  onAssignGroup,
 }: ServerListViewProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -104,19 +118,44 @@ export function ServerListView({
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
-      const nextServers = getReorderedServers(
-        allServers,
-        String(event.active.id),
-        event.over?.id ? String(event.over.id) : null,
-      );
-      if (nextServers === allServers) return;
+      const activeId = String(event.active.id);
+      const overId = event.over?.id ? String(event.over?.id) : null;
+      if (!overId || activeId === overId) return;
+      // 仅允许在同组内拖拽;跨组拖拽不在此处处理(由分组头菜单/详情页承担)。
+      const inSameScope = groupId
+        ? servers.some((s) => s.id === overId)
+        : allServers.some((s) => s.id === overId);
+      if (!inSameScope) return;
+
+      const nextServers = getReorderedServers(groupId ? servers : allServers, activeId, overId);
+      if (nextServers === (groupId ? servers : allServers)) return;
       try {
-        await onReorder(nextServers);
+        if (groupId) {
+          // 仅重排组内 server:组外 server 保持原相对顺序,组内 server 作为一块按新顺序插入到
+          // 它在 allServers 中第一次出现的位置。
+          const scopeIds = new Set(nextServers.map((s) => s.id));
+          const result: Server[] = [];
+          let pushedGroup = false;
+          for (const s of allServers) {
+            if (scopeIds.has(s.id)) {
+              if (!pushedGroup) {
+                result.push(...nextServers);
+                pushedGroup = true;
+              }
+            } else {
+              result.push(s);
+            }
+          }
+          if (!pushedGroup) result.push(...nextServers);
+          await onReorder(result);
+        } else {
+          await onReorder(nextServers);
+        }
       } catch (err) {
         onReorderError(getErrorMessage(err, "Unable to save server order"));
       }
     },
-    [allServers, onReorder, onReorderError],
+    [servers, allServers, groupId, onReorder, onReorderError],
   );
 
   return (
@@ -132,6 +171,8 @@ export function ServerListView({
               key={server.id}
               server={server}
               action={serverActions[server.id]}
+              groups={groups}
+              onAssignGroup={onAssignGroup}
               onStart={onStart}
               onStop={onStop}
               onRemove={onRemove}

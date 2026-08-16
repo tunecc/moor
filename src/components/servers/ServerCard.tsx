@@ -1,12 +1,30 @@
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ErrorBanner } from "@/components/shared/ErrorBanner";
-import { AlertTriangle, Loader2, Play, Square, Terminal, Trash2, Zap } from "lucide-react";
+import {
+  AlertTriangle,
+  FolderInput,
+  Loader2,
+  Play,
+  Square,
+  Terminal,
+  Trash2,
+  Zap,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import type { Server } from "@moor/types";
+import type { Server, ServerGroup } from "@moor/types";
 import type { ServerAction } from "@/hooks/server-patch-utils";
+import { UNGROUPED_ID } from "@/hooks/useServerGroups";
 import { cn, getErrorMessage } from "@/lib/utils";
 
 type RemoveFeedback =
@@ -42,6 +60,9 @@ interface ServerCardProps {
   onStart: (id: string) => Promise<void>;
   onStop: (id: string) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
+  /** Available groups + handler; when provided, the card shows a "move to group" control. */
+  groups?: ServerGroup[];
+  onAssignGroup?: (serverId: string, groupId: string | null) => Promise<void>;
 }
 
 function getCommandPreview(server: Server): string {
@@ -281,11 +302,15 @@ export function ServerCard({
   onStart,
   onStop,
   onRemove,
+  groups,
+  onAssignGroup,
 }: ServerCardProps) {
   const isCompact = variant === "compact";
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [assigningGroup, setAssigningGroup] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
   const navigate = useNavigate();
   const isRunning = server.status === "running";
   const isError = server.status === "error";
@@ -334,6 +359,23 @@ export function ServerCard({
     setConfirmingRemove(false);
     setRemoveError(null);
   };
+
+  const handleAssignGroup = async (groupId: string) => {
+    if (!onAssignGroup) return;
+    const target = groupId === UNGROUPED_ID ? null : groupId;
+    if ((server.groupId ?? null) === target) return;
+    setAssigningGroup(true);
+    setAssignError(null);
+    try {
+      await onAssignGroup(server.id, target);
+    } catch (err) {
+      setAssignError(getErrorMessage(err, "Unable to move server"));
+    } finally {
+      setAssigningGroup(false);
+    }
+  };
+
+  const currentGroupValue = server.groupId ?? UNGROUPED_ID;
 
   return (
     <Card
@@ -384,6 +426,39 @@ export function ServerCard({
               }}
             />
           </div>
+          {groups && onAssignGroup && (
+            <div
+              className={cn("mt-2 flex items-center gap-2", isCompact ? "text-[11px]" : "text-xs")}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <FolderInput
+                className={cn(
+                  "shrink-0 text-[var(--fg-40)]",
+                  isCompact ? "h-3 w-3" : "h-3.5 w-3.5",
+                )}
+              />
+              <Select
+                value={currentGroupValue}
+                onValueChange={(v) => void handleAssignGroup(v)}
+                disabled={assigningGroup}
+              >
+                <SelectTrigger className="h-7 w-auto min-w-[8rem] gap-1 px-2 py-0 text-[11px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNGROUPED_ID}>Ungrouped</SelectItem>
+                  {groups.length > 0 && <SelectSeparator />}
+                  {groups.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {assigningGroup && <Loader2 className="h-3 w-3 animate-spin text-[var(--fg-40)]" />}
+            </div>
+          )}
+          {assignError && <ErrorBanner message={assignError} variant="mono" className="mt-2" />}
           {removeFeedback && (
             <RemoveFeedbackRow
               feedback={removeFeedback}

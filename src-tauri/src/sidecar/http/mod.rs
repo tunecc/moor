@@ -73,6 +73,7 @@ pub fn create_app(state: Arc<AppState>) -> Router {
     Router::new()
         .merge(routes::health::router())
         .merge(routes::servers::router())
+        .merge(routes::server_groups::router())
         .merge(routes::profiles::router())
         .merge(routes::logs::router())
         .merge(routes::settings::router())

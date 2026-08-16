@@ -1,4 +1,5 @@
 use crate::sidecar::db::server_repo::{Server, ServerInsertInput, ServerRepository};
+use crate::sidecar::db::server_group_repo::ServerGroupRepository;
 use crate::sidecar::db::Database;
 use crate::sidecar::services::server_manager::ServerManager;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -76,6 +77,8 @@ pub struct UpdateServerInput {
     #[serde(default)]
     pub working_dir: UpdateField<String>,
     pub auto_start: Option<bool>,
+    #[serde(default)]
+    pub group_id: UpdateField<String>,
 }
 
 impl UpdateServerInput {
@@ -273,6 +276,23 @@ impl ServerService {
                 set_clauses.push(format!("auto_start = ?{param_idx}"));
                 params.push(Box::new(value as i64));
                 new_auto_start = Some(value);
+                param_idx += 1;
+            }
+            if let UpdateField::Set(value) = &body.group_id {
+                if let Some(group_id) = value {
+                    // 引用的分组必须存在;不存在则拒绝。
+                    let exists = ServerGroupRepository::new(db)
+                        .find_by_id(group_id)
+                        .map_err(ServerServiceError::Internal)?
+                        .is_some();
+                    if !exists {
+                        return Err(ServerServiceError::Validation(format!(
+                            "Server group '{group_id}' not found"
+                        )));
+                    }
+                }
+                set_clauses.push(format!("group_id = ?{param_idx}"));
+                params.push(Box::new(value.clone()));
                 param_idx += 1;
             }
 

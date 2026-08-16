@@ -6,6 +6,10 @@ export const serverKeys = {
     ["servers", serverId, "tools", profileId] as const,
 };
 
+export const serverGroupKeys = {
+  list: () => ["server-groups"] as const,
+};
+
 export const profileKeys = {
   list: () => ["profiles"] as const,
   detail: (id: string) => ["profiles", id] as const,

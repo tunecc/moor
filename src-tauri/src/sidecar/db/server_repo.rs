@@ -18,6 +18,7 @@ pub struct Server {
     pub working_dir: Option<String>,
     pub error_message: Option<String>,
     pub sort_order: Option<i64>,
+    pub group_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -74,6 +75,7 @@ pub(crate) fn map_server(row: &rusqlite::Row<'_>) -> rusqlite::Result<Server> {
         } else {
             Some(sort_order)
         },
+        group_id: row.get("group_id")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
     })

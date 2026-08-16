@@ -7,6 +7,7 @@ export type {
   ServerStatus,
   ServerUpdateInput,
 } from "./server.js";
+export type { ServerGroup } from "./server-group.js";
 export type {
   ImportDiagnostic,
   ImportPreview,

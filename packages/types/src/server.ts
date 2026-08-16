@@ -16,6 +16,7 @@ export interface Server {
   workingDir?: string | null;
   errorMessage?: string | null;
   sortOrder?: number | null;
+  groupId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -41,4 +42,5 @@ export interface ServerUpdateInput {
   headers?: Record<string, string> | null;
   workingDir?: string | null;
   autoStart?: boolean;
+  groupId?: string | null;
 }

@@ -20,7 +20,7 @@ export default defineConfig({
     env: {
       builtin: true,
     },
-    ignorePatterns: ["dist/**", "src-tauri/**"],
+    ignorePatterns: ["dist/**", "src-tauri/**", ".agents/**", ".comet/**"],
     rules: {
       "constructor-super": "error",
       "for-direction": "error",

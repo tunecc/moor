@@ -37,6 +37,13 @@ export const routes = {
     tools: (id: string, profileId?: string) =>
       withQuery(`/api/servers/${pathSegment(id)}/tools`, { profile_id: profileId }),
   },
+  serverGroups: {
+    list: () => "/api/server-groups",
+    create: () => "/api/server-groups",
+    update: (id: string) => `/api/server-groups/${pathSegment(id)}`,
+    delete: (id: string) => `/api/server-groups/${pathSegment(id)}`,
+    order: () => "/api/server-groups/order",
+  },
   profiles: {
     list: () => "/api/profiles",
     detail: (id: string) => `/api/profiles/${pathSegment(id)}`,

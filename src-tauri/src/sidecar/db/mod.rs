@@ -1,6 +1,7 @@
 pub mod audit_log_repo;
 mod migrations;
 pub mod profile_repo;
+pub mod server_group_repo;
 pub mod server_repo;
 pub mod settings_repo;
 pub mod tool_discovery_repo;

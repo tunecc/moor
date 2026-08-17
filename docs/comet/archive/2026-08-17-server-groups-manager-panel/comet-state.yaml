@@ -1,0 +1,558 @@
+schema: comet.native.v4
+name: server-groups-manager-panel
+language: zh-CN
+phase: archive
+status: done
+state_version: 7
+brief: brief.md
+spec_changes:
+  - capability: server-groups
+    operation: modify
+    source: specs/server-groups/spec.md
+workspace:
+  isolation: current
+  change_branch: main
+  target_branch: main
+  finish: null
+loop:
+  stage: done
+  goal_cycle: 1
+  iteration: 1
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text:
+      "**A1 卡片只剩启动+删除**:渲染 `ServerCard`(list 与 compact 两种 variant),其控制区只有 启动/停止
+      + 删除 两个按钮;不再有
+      `OverflowMenu`、`MoreVertical`、`FolderInput`。`ServerCard.test.tsx`
+      现有用例仍通过(需要更新断言以反映菜单已移除)。"
+    result: passed
+    reason:
+      text: ServerCard 不再导入 OverflowMenu/MoreVertical/FolderInput; ServerControls 仅渲染
+        LifecycleButton(启停)+Remove Button; list/compact 共用 ServerControls; 测试断言无
+        FolderInput/role=menu 且保留启停+删除。
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: "**A2 卡片不再接受 groups/onAssignGroup**:`ServerCard` 不再声明
+      `groups`/`onAssignGroup` props;调用方不再传递。TypeScript 编译通过。"
+    result: passed
+    reason:
+      text: ServerCardProps 不再声明 groups/onAssignGroup;
+        ServerListView/ServerGridView/Servers.tsx 不再传递; tsc -b 通过。
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: "**A3 管理面板入口**:Servers 页顶部「Add Group」旁新增「Manage Groups」按钮;点击打开
+      `ServerGroupsManager` 弹出面板;再次点击或 Esc/外部点击关闭。"
+    result: passed
+    reason:
+      text: Servers.tsx 新增 Manage Groups 按钮置 showGroupsManager=true 挂载
+        ServerGroupsManager; 基于 radix AlertDialog(Esc+backdrop+X+Done ->
+        onOpenChange(false)); 不导航离开 /servers。
+      truncated: false
+  - id: A4
+    source: brief.md
+    text: "**A4 面板列出分组**:面板打开后按 sortOrder 列出所有具名分组,每组显示名称、server
+      数量、重命名、删除按钮;Ungrouped 不在面板列表中(它不可重命名/删除)。"
+    result: passed
+    reason:
+      text:
+        ServerGroupsManager 按 sortOrder 渲染具名分组, 每行显示名称/计数/重命名/删除/上移/下移; Ungrouped
+        单独作为 droppable 容器在末尾, 不可编辑。
+      truncated: false
+  - id: A5
+    source: brief.md
+    text:
+      "**A5 面板内增删改序**:面板内「Add Group」创建新组;重命名更新名称;删除走原确认对话框语义(组内 server 回落到
+      Ungrouped);上/下移动调整 sortOrder。所有操作通过既有 `useServerGroups` mutation。"
+    result: passed
+    reason:
+      text: create/rename/delete/reorder 均经 Servers.tsx 接到 useServerGroups
+        mutations(createGroup/renameGroup/deleteGroup/reorderGroups); 删除带确认
+        AlertDialog。
+      truncated: false
+  - id: A6
+    source: brief.md
+    text: '**A6 面板内跨组拖拽**:面板内把 server `a`(组 g1)拖到组 g2 区域,`onAssignGroup("a","g2")`
+      被调用一次;不调 `onReorder`;拖回原组原位无 mutation。'
+    result: passed
+    reason:
+      text: handleDragEnd 仅对 group:<id> droppable 调一次 onAssignGroup(activeId,
+        targetGroupId); 无 onReorder prop; 拖回原位 if ((active.groupId ?? null) ===
+        targetGroupId) return 提前返回。
+      truncated: false
+  - id: A7
+    source: brief.md
+    text: "**A7 面板内空组落点**:面板内某具名分组当前无 server,把任一 server
+      拖入该组区域,`onAssignGroup(serverId, thatGroupId)` 被调用。"
+    result: passed
+    reason:
+      text: 每个具名分组 GroupBucket 注册 useDroppable(id group:<group.id>), 与 server 数无关,
+        空组为有效 droppable。
+      truncated: false
+  - id: A8
+    source: brief.md
+    text: "**A8 面板内 Ungrouped 落点**:面板内把 server 拖到 Ungrouped
+      区域,`onAssignGroup(serverId, null)` 被调用。"
+    result: passed
+    reason:
+      text: Ungrouped 容器 GroupBucket droppableId=group:<UNGROUPED_ID>; handleDragEnd 将
+        UNGROUPED_ID 映射为 null, 调 onAssignGroup(activeId, null)。
+      truncated: false
+  - id: A9
+    source: brief.md
+    text:
+      "**A9 Servers 页空组落点修复**:Servers 页某具名分组当前无 server(显示「drag one here」),把任一
+      server 拖入该分区,`onAssignGroup(serverId, thatGroupId)` 被调用(此前不生效)。"
+    result: passed
+    reason:
+      text: ServerGroupSection.tsx diff 显示展开分支现在也用 GroupDropArea(droppableId
+        group:<id>) 包裹子组件(此前为普通 div.pl-1), 空展开分区也注册 useDroppable; 外层
+        handleSectionDrop 解析 droppable 为目标组 id 并调 handleAssignGroup。
+      truncated: false
+  - id: A10
+    source: brief.md
+    text: "**A10 Servers 页折叠组落点**:折叠的分区仍作为 droppable,拖入即移动。"
+    result: passed
+    reason:
+      text: 折叠分支渲染 GroupDropArea(droppableId group:<id>) + Empty group/drag a server
+        here 消息, 仍为 droppable。
+      truncated: false
+  - id: A11
+    source: brief.md
+    text: "**A11 卡片高度不回归**:卡片没有移除确认/错误 banner 时保持紧凑高度(无分组选择行)。"
+    result: passed
+    reason:
+      text: ServerCard 不再保留 assignError/assigningGroup 状态, 无分组选择行, 无 assignError
+        ErrorBanner; 卡片主体与此前紧凑布局一致。
+      truncated: false
+  - id: A12
+    source: brief.md
+    text: "**A12 非回归**:`ServerCard.test.tsx`、`server-groups.test.ts` 通过;点击卡片跳转
+      `/servers/:id`;移除确认时点击不跳转;list/grid 同组拖拽重排仍走 `onReorder`;跨组拖拽只写
+      `groupId`。"
+    result: passed
+    reason:
+      text: ServerCard.test.tsx/server-groups.test.ts 94 测试通过; 点击跳转 /servers/:id,
+        Enter/Space 跳转, 移除确认期间点击被阻止, 拖拽句柄点击抑制; list/grid 同组拖拽仍走 onReorder,
+        跨组拖拽只写 groupId(含同位置返回 no-op 提前返回)。
+      truncated: false
+  - id: A13
+    source: specs/server-groups/spec.md
+    text: data migration Given an existing Moor database, when migrations run, then
+      a `server_groups` table is created with columns `id TEXT PRIMARY KEY`,
+      `name TEXT NOT NULL`, `sort_order INTEGER NOT NULL DEFAULT 0`, `created_at
+      TEXT NOT NULL`, `updated_at TEXT NOT NULL`. A nullable `group_id TEXT`
+      column is added to `mcp_servers`; existing servers keep `group_id` NULL
+      (ungrouped). The migration is idempotent via `CREATE TABLE IF NOT EXISTS`,
+      `ensure_column`, and `CREATE INDEX IF NOT EXISTS`, and may be run
+      repeatedly without error. The existing `sort_order` backfill behavior does
+      not regress.
+    result: passed
+    reason:
+      text: 后端 src-tauri 未修改, 数据迁移场景未受影响。
+      truncated: false
+  - id: A14
+    source: specs/server-groups/spec.md
+    text: Ungrouped partition `group_id IS NULL` servers are displayed in a virtual
+      "Ungrouped" partition that always appears after every named group, cannot
+      be renamed, and cannot be deleted. The Ungrouped id is a sentinel never
+      stored in the database.
+    result: passed
+    reason:
+      text: UNGROUPED_ID 仍为 __ungrouped__ sentinel; 面板/页面将 null groupId 渲染为 Ungrouped
+        且不可重命名/删除。
+      truncated: false
+  - id: A15
+    source: specs/server-groups/spec.md
+    text: single membership A server belongs to at most one group at a time. Moving
+      a server to a new group removes it from the previous group by writing
+      `mcp_servers.group_id` directly.
+    result: passed
+    reason:
+      text: 跨组拖拽只写 updateServer({id, updates:{groupId}}), 替换原组。
+      truncated: false
+  - id: A16
+    source: specs/server-groups/spec.md
+    text: ordering Servers are partitioned by group; named groups are ordered by
+      `server_groups.sort_order` ascending, with Ungrouped last. Within each
+      partition, servers keep their existing `mcp_servers.sort_order` and
+      reorder behavior unchanged.
+    result: passed
+    reason:
+      text: partitionServersByGroup + useServerGroups 排序未改; server-groups.test.ts 通过。
+      truncated: false
+  - id: A17
+    source: specs/server-groups/spec.md
+    text: exposure unchanged Grouping is purely visual. Creating, renaming, deleting
+      a group, or moving a server between groups does not change any
+      `profile_servers` row, does not change the Active Profile enabled server
+      set, does not change `tools/list` results, and does not record grouping
+      information in audit logs.
+    result: passed
+    reason:
+      text: 后端/profile_servers/audit 未触及。
+      truncated: false
+  - id: A18
+    source: specs/server-groups/spec.md
+    text: group create Creating a group with a non-empty name persists a
+      `server_groups` row, assigns `sort_order` via `COALESCE(MIN(sort_order),
+      0) - 1` so new groups appear first, returns 201, and the new group is
+      initially empty.
+    result: passed
+    reason:
+      text: createGroup mutation 未改。
+      truncated: false
+  - id: A19
+    source: specs/server-groups/spec.md
+    text: group rename Renaming a group updates only `name` and `updated_at`; the
+      group id and `sort_order` are unchanged, so its servers remain assigned
+      and the displayed name updates.
+    result: passed
+    reason:
+      text: renameGroup mutation 未改。
+      truncated: false
+  - id: A20
+    source: specs/server-groups/spec.md
+    text: group delete Deleting a non-empty group runs in a transaction that sets
+      `group_id = NULL` on all servers in that group, then deletes the group
+      row. The servers themselves are not deleted and fall back to Ungrouped.
+      Deleting the last named group leaves only Ungrouped. Deleting a missing
+      group returns not found.
+    result: passed
+    reason:
+      text: deleteGroup mutation 未改(事务性行为在后端, 未改)。
+      truncated: false
+  - id: A21
+    source: specs/server-groups/spec.md
+    text: group reorder Reordering groups requires the input to equal the set of all
+      existing named group ids exactly once; otherwise it is rejected. It writes
+      `sort_order` in the given sequence. Within a group, servers still sort by
+      their own `sort_order`.
+    result: passed
+    reason:
+      text: reorderGroups mutation 未改。
+      truncated: false
+  - id: A22
+    source: specs/server-groups/spec.md
+    text: "server assignment via update `/api/servers/{id}` `PUT` accepts an
+      optional `groupId: string | null`. `null` moves the server to Ungrouped; a
+      non-null value must reference an existing group, otherwise the update is
+      rejected. There is no separate move endpoint."
+    result: passed
+    reason:
+      text: updateServer 路径仍写 groupId; 无新 move 端点。
+      truncated: false
+  - id: A23
+    source: specs/server-groups/spec.md
+    text: HTTP surface The API exposes `GET /api/server-groups`, `POST
+      /api/server-groups` returning 201, `GET/PUT/DELETE
+      /api/server-groups/{id}`, and `PUT /api/server-groups/order` with `{
+      groupIds }`.
+    result: passed
+    reason:
+      text: src-tauri 路由未改。
+      truncated: false
+  - id: A24
+    source: specs/server-groups/spec.md
+    text: "frontend types `@moor/types` adds `ServerGroup`, adds `groupId?: string |
+      null` on `Server`, adds `groupId?: string | null` on `ServerUpdateInput`,
+      and adds `serverGroupKeys`."
+    result: passed
+    reason:
+      text: "@moor/types 未改; 复用现有 ServerGroup/groupId 类型。"
+      truncated: false
+  - id: A25
+    source: specs/server-groups/spec.md
+    text: frontend queries `useServerGroups` provides list query plus
+      create/rename/delete/reorder mutations; mutations invalidate both
+      `serverGroupKeys.list()` and `serverKeys.list()`. Server group assignment
+      goes through the existing `updateServer` mutation on `/api/servers/{id}`.
+      AddServerForm does not add a group selector; newly added servers are
+      ungrouped by default.
+    result: passed
+    reason:
+      text: useServerGroups/useServers mutations 未改; AddServerForm 未改。
+      truncated: false
+  - id: A26
+    source: specs/server-groups/spec.md
+    text: "Servers page UI The Servers page partitions filtered servers by group:
+      named groups by `sortOrder` and Ungrouped last. Each partition has a
+      header with name, server count, rename and delete controls (Ungrouped
+      hides rename/delete), and collapse state persisted in `localStorage` key
+      `moor.servers.collapsedGroups`, shared across grid and list views. Group
+      order is adjusted via header up/down buttons. Search filters across groups
+      by name; empty groups show an empty state; both grid and list views render
+      the same partitions and empty states."
+    result: passed
+    reason:
+      text: 分区/头/折叠持久化/搜索/空状态在 Servers.tsx/ServerGroupSection.tsx 未改。
+      truncated: false
+  - id: A27
+    source: specs/server-groups/spec.md
+    text: server card has no group controls A server card's control area contains
+      only start/stop and remove buttons. The card never renders an inline group
+      selector, an overflow menu, or any other group-management affordance. The
+      card does not accept `groups` or `onAssignGroup` props. The card keeps its
+      original compact height regardless of context.
+    result: passed
+    reason:
+      text: 同 A1; 卡片只剩启停+删除, 无分组选择器/溢出菜单, 无 groups/onAssignGroup props, 紧凑高度保持。
+      truncated: false
+  - id: A28
+    source: specs/server-groups/spec.md
+    text: cross-group drag moves server In both list and grid views, dragging a
+      server card onto a server in another named group (or onto the Ungrouped
+      partition) calls `onAssignGroup(serverId, targetGroupId)` exactly once,
+      where `targetGroupId` is the group id of the hovered server (or `null` for
+      Ungrouped). The drag does not call `onReorder` and does not change any
+      server's `sort_order`. Dragging back to the original group at the same
+      position performs no mutation.
+    result: passed
+    reason:
+      text: ServerListView/ServerGridView handleDragEnd 精确调一次 onAssignGroup, 无
+        onReorder, 拖回原位 no-op。
+      truncated: false
+  - id: A29
+    source: specs/server-groups/spec.md
+    text: same-group drag still reorders In both list and grid views, dragging a
+      server onto another server within the same group calls `onReorder` with a
+      new `Server[]` order that preserves the relative order of servers outside
+      that group. It does not call `onAssignGroup`.
+    result: passed
+    reason:
+      text: 同组分支 -> onReorder(result), 无 onAssignGroup。
+      truncated: false
+  - id: A30
+    source: specs/server-groups/spec.md
+    text: empty or collapsed group is a valid drop target Every partition (named
+      group or Ungrouped, expanded or collapsed, empty or non-empty) registers a
+      `useDroppable` with id `group:<partitionId>`. Dragging any server card
+      into a partition's drop area calls `onAssignGroup(serverId,
+      thatPartitionGroupId)` (or `null` for Ungrouped), regardless of whether
+      the partition currently contains any servers. Empty expanded partitions
+      are valid drop targets, not no-ops.
+    result: passed
+    reason:
+      text: ServerGroupSection 折叠与展开分支均包 GroupDropArea(useDroppable id group:<id>);
+        空展开分区现为 droppable。
+      truncated: false
+  - id: A31
+    source: specs/server-groups/spec.md
+    text: grid view drag support The grid view renders a `DndContext` with a
+      grid-appropriate sorting strategy, independent of the list view's
+      `DndContext`. Both same-group reorder and cross-group moves are supported
+      in the grid view; cross-group moves behave identically to the list view
+      (write `groupId` only).
+    result: passed
+    reason:
+      text: ServerGridView 有独立 DndContext + rectSortingStrategy; 跨组写 groupId, 与 list
+        一致。
+      truncated: false
+  - id: A32
+    source: specs/server-groups/spec.md
+    text: Manage Groups panel entry The Servers page header has a "Manage Groups"
+      button next to "Add Group". Clicking it opens a `ServerGroupsManager`
+      modal panel (built from existing UI primitives, no new dependencies). The
+      panel closes on Esc, on outside/backdrop click, or on an explicit close
+      button. Opening the panel does not navigate away from the Servers page.
+    result: passed
+    reason:
+      text: Manage Groups 按钮打开 ServerGroupsManager AlertDialog; Esc/backdrop/Close
+        均关闭; 不导航离开。
+      truncated: false
+  - id: A33
+    source: specs/server-groups/spec.md
+    text: Manage Groups panel lists named groups Inside the panel, named groups are
+      listed in `sortOrder` order. Each row shows the group name, its server
+      count, and rename / delete / move-up / move-down controls. The Ungrouped
+      partition is not listed as an editable group (it cannot be renamed,
+      deleted, or reordered), but appears as a drop target at the end of the
+      list.
+    result: passed
+    reason:
+      text: 每个具名分组行含名称/计数/重命名/删除/上移/下移; Ungrouped 在末尾作 droppable 容器, 不可编辑。
+      truncated: false
+  - id: A34
+    source: specs/server-groups/spec.md
+    text: Manage Groups panel group operations The panel supports creating a new
+      group (Add Group), renaming a group (inline edit with confirmation),
+      deleting a group (with confirmation; its servers fall back to Ungrouped),
+      and reordering groups (up/down). All operations go through the existing
+      `useServerGroups` mutations.
+    result: passed
+    reason:
+      text: Add Group/Rename(带确认)/Delete(带确认)/Up/Down 均经 useServerGroups mutations。
+      truncated: false
+  - id: A35
+    source: specs/server-groups/spec.md
+    text: Manage Groups panel cross-group drag Inside the panel, each named group
+      and the Ungrouped partition render a drop area listing the servers
+      currently in that group. Dragging a server from one group's area to
+      another group's area calls `onAssignGroup(serverId, targetGroupId)`
+      exactly once (or `null` for Ungrouped). The panel does not perform
+      same-group reordering; within-group order is managed on the Servers page
+      list/grid views. Dragging back to the original group at the same position
+      performs no mutation.
+    result: passed
+    reason:
+      text: 每个组+Ungrouped 渲染 droppable; 拖拽调一次 onAssignGroup; 面板内无同组重排; 拖回原位 no-op。
+      truncated: false
+  - id: A36
+    source: specs/server-groups/spec.md
+    text: Manage Groups panel empty group drop target An empty named group inside
+      the panel renders its drop area as an active drop target. Dragging any
+      server into an empty group's area calls `onAssignGroup(serverId,
+      thatGroupId)`. Empty groups are valid drop targets in the panel, not
+      no-ops.
+    result: passed
+    reason:
+      text: 空组渲染 GroupBucket(useDroppable), 与计数无关; 拖入触发 onAssignGroup。
+      truncated: false
+  - id: A37
+    source: specs/server-groups/spec.md
+    text: non-regression Profile, ProfileServer, ToolDiscovery, Audit, Config
+      Import, and server start/stop/drag-reorder behaviors are unchanged. Config
+      Import keeps its existing logic; imported servers default to Ungrouped.
+      Click-to-details, Enter/Space navigation, remove confirmation, and
+      drag-handle click suppression continue to behave as before. Same-group
+      drag in list/grid still reorders; cross-group drag still writes `groupId`
+      only.
+    result: passed
+    reason:
+      text: Profile/ProfileServer/ToolDiscovery/Audit/Config Import 未改;
+        点击跳转详情/Enter/Space/移除确认阻止/拖拽句柄点击抑制行为一致; list/grid 同组重排与跨组只写 groupId
+        经测试与代码阅读验证。
+      truncated: false
+builder_handoff:
+  candidate_id: d4a08785-d118-4b82-bcb8-d40010f9b0d7
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:ce2ad17f-9323-4a17-a0b9-dd69deb13f16
+  iteration: 1
+  summary:
+    text:
+      移除 ServerCard 的 OverflowMenu 分组菜单(卡片只剩启动+删除);新增 Servers 页顶部 Manage Groups
+      按钮弹出 ServerGroupsManager 面板(增删改序+面板内跨组拖拽只写 groupId+Ungrouped 落点);修复
+      Servers 页空组/折叠组作为拖拽落点(每分区挂 useDroppable group:<id>);删除未用的
+      OverflowMenu.tsx;移除 ServerCard 死代码
+      handleAssignGroup/assignError。tsc/lint/test 全通过。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+    - A4
+    - A5
+    - A6
+    - A7
+    - A8
+    - A9
+    - A10
+    - A11
+    - A12
+  checks:
+    - name:
+        text: typecheck (tsc -b)
+        truncated: false
+      result: passed
+      note:
+        text: 0 errors
+        truncated: false
+    - name:
+        text: lint (vp lint src)
+        truncated: false
+      result: passed
+      note:
+        text: 0 errors; 1 preexisting globalThis-as-any warning in ServerCard.test.tsx,
+          not introduced this change
+        truncated: false
+    - name:
+        text: unit-tests (vp test)
+        truncated: false
+      result: passed
+      note:
+        text: 17 files / 94 tests passed
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: 面板内拖拽用 useDraggable+useDroppable, 未做实机拖拽验证, 仅静态测试 + 类型检查。
+      truncated: false
+    - text: ServerGroupsManager 的 onRenameGroup/onReorderGroups/onDeleteGroup 在
+        Servers.tsx 中包装了 setOrderError, 错误展示在页面 orderError 而非面板内 error; 面板内
+        error 仅捕获 createGroup/assign 的本地错误。
+      truncated: false
+    - text: 未改后端、AddServerForm、useServerGroups/useServers mutation 逻辑。
+      truncated: false
+  known_limits_truncated: false
+  submitted_at: 2026-08-17T01:40:22.933Z
+blockers: []
+verification:
+  candidate_id: d4a08785-d118-4b82-bcb8-d40010f9b0d7
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:a28eb87e-fb7e-43f8-a65f-bd61ca8277e8
+  iteration: 1
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: "Verifier 独立确认 server-groups-manager-panel 通过全部 37 项验收(A1-A37): tsc -b/vp
+      lint src/vp test(94 测试)均 exit 0; ServerCard 只剩启停+删除, 新增
+      ServerGroupsManager AlertDialog 面板接到 useServerGroups mutations 且支持跨组拖拽(只写
+      groupId)+Ungrouped droppable, 关键 A9 修复正确把展开与折叠分区都包进 GroupDropArea
+      useDroppable; 后端/@moor/types/useServerGroups/useServers/AddServerForm 均未改,
+      所有 preexisting spec 场景无回归通过。"
+    truncated: false
+  risks:
+    - text: ServerGroupsManager 面板内 error 仅捕获 createGroup 与 onAssignGroup(拖拽)失败;
+        onRenameGroup/onReorderGroups/onDeleteGroup 在 Servers.tsx 的包装器将错误写入页面级
+        orderError, 重命名/重排/删除期间面板内无错误反馈, 错误显示在页面 error banner。与 brief
+        措辞一致(所有操作经既有 mutation), 不违反验收, 仅 UX 说明。
+      truncated: false
+    - text: 面板内拖拽用 useDraggable+useDroppable, 仅静态/类型验证, 无实机 dnd-kit 交互测试(brief
+        只要求单元/组件覆盖 A1-A12, 未要求交互拖拽测试)。
+      truncated: false
+    - text:
+        OverflowMenu.tsx 被完全删除(brief D1 说保留, 范围后来缩减; 无剩余引用, tsc 通过)。与 brief D1
+        措辞有轻微偏差, 但与移除卡片分组菜单的成果一致, 不影响任何验收项。
+      truncated: false
+  risks_truncated: false
+  completed_at: 2026-08-17T01:46:06.415Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: "Verifier 独立确认 server-groups-manager-panel 通过全部 37 项验收(A1-A37): tsc -b/vp
+        lint src/vp test(94 测试)均 exit 0; ServerCard 只剩启停+删除, 新增
+        ServerGroupsManager AlertDialog 面板接到 useServerGroups mutations
+        且支持跨组拖拽(只写 groupId)+Ungrouped droppable, 关键 A9 修复正确把展开与折叠分区都包进
+        GroupDropArea useDroppable;
+        后端/@moor/types/useServerGroups/useServers/AddServerForm 均未改, 所有
+        preexisting spec 场景无回归通过。"
+      truncated: false
+    completed_at: 2026-08-17T01:46:06.415Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-08-17T01:12:59.124Z

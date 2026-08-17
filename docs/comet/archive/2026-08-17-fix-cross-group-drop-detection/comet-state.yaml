@@ -1,0 +1,217 @@
+schema: comet.native.v4
+name: fix-cross-group-drop-detection
+language: zh-CN
+phase: archive
+status: done
+state_version: 10
+brief: brief.md
+spec_changes: []
+workspace:
+  isolation: current
+  change_branch: main
+  target_branch: main
+  finish: null
+loop:
+  stage: done
+  goal_cycle: 1
+  iteration: 2
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 1
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: A1. 从 Ungrouped 拖一个 server,光标停留在上方某个具名分区的**分组头**区域松开 → 该 server
+      移入该分组(`groupId` 更新)。
+    result: passed
+    reason:
+      text: 光标在分区头(在 GroupDropArea 内,不在任何 server sortable 矩形内)→ serverCollisions 空 →
+        groupCollisions 返回 group:<id> → handleDragEnd 分支 1 触发
+        handleAssignGroup。GroupDropArea(ServerGroupSection.tsx:116-193)包裹
+        header+body 为单一 droppable。
+      truncated: false
+  - id: A2
+    source: brief.md
+    text:
+      A2. 从 Ungrouped 拖一个 server,光标停留在上方某个**非空展开**分组的卡片之间空白处松开 → 该 server
+      移入该分组(而非落空或落到相邻分区)。
+    result: passed
+    reason:
+      text:
+        光标在卡片间间隙:在 GroupDropArea 矩形内但不在任何 server sortable 卡片矩形内 → serverCollisions
+        空 → groupCollisions 胜出 → 分支 1 跨组移动。
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: A3. 从 Ungrouped 拖一个 server 到**空组**的落点区域松开 → 移入该空组。
+    result: passed
+    reason:
+      text: 空组渲染提示文本在 GroupDropArea 内,无 server sortable → serverCollisions 空 →
+        groupCollisions 返回 group:<id> → 分支 1 触发。
+      truncated: false
+  - id: A4
+    source: brief.md
+    text: A4. 从 Ungrouped 拖一个 server 到**折叠分组**区域松开 → 移入该折叠分组,折叠状态不变。
+    result: passed
+    reason:
+      text: 折叠态仍渲染 GroupDropArea 包裹 header div;无 server sortable 渲染 → groupCollisions
+        返回 group:<id> → 分支 1 触发;折叠状态不被触碰。
+      truncated: false
+  - id: A5
+    source: brief.md
+    text: A5. 同组内拖动 server 排序仍正常工作(`reorderServers` 写 `sort_order`)。
+    result: passed
+    reason:
+      text:
+        反转优先级:serverCollisions 非空时优先返回。同组拖动到兄弟卡片上 → over.id = 兄弟 server(非
+        group:<id>)→ 跳过分支 1,分支 2 同组 fallthrough,分支 3 reorderServers 执行写
+        sort_order。Round-1 回归根因消除。
+      truncated: false
+  - id: A6
+    source: brief.md
+    text: A6. 列表视图与网格视图两种 `viewMode` 下,A1–A5 均成立。
+    result: passed
+    reason:
+      text: groupAwareCollision 挂在 DndContext 级别(Servers.tsx:438),覆盖 ServerListView 与
+        ServerGridView;useSortable 卡片矩形在两种 viewMode 下行为一致;A1-A5 推理对两者均适用。
+      truncated: false
+  - id: A7
+    source: brief.md
+    text: A7. `pnpm build:frontend`(`tsc -b`)与 `pnpm lint` 退出码 0,不引入新 lint 警告;`pnpm
+      test` 仍通过。
+    result: passed
+    reason:
+      text: npx tsc -b --force 退出 0;npx vp lint src 退出 0(唯一警告 no-explicit-any 在
+        ServerCard.test.tsx 为 preexisting);npx vp test run 退出 0(17 文件 94 测试通过)。
+      truncated: false
+builder_handoff:
+  candidate_id: 3804c724-0dea-4bb2-81a5-9f63048509e3
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:efc9c6a3-b032-49f8-9b48-b17495bea8c5
+  iteration: 2
+  summary:
+    text: 修复 A5 同组排序回归。反转 groupAwareCollision 优先级:先看光标是否在某个 server sortable
+      矩形内,有则优先返回 server(同组重排走 handleDragEnd 分支 3);否则(光标在分区头/卡片间空白/空组/折叠分区,无
+      server sortable 覆盖)才返回 group:<id>(跨组移动);都不命中回退 closestCenter;键盘操作直接
+      closestCenter。清理死代码 data-group-drop 属性与未使用的 includeHeader 参数。handleDragEnd
+      三分支逻辑未改。ServerGroupSection 仍用单个 GroupDropArea 包裹整段分区(分区头+内容)。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+    - A4
+    - A5
+    - A6
+    - A7
+  checks:
+    - name:
+        text: tsc -b --force
+        truncated: false
+      result: passed
+      note:
+        text: 退出码 0
+        truncated: false
+    - name:
+        text: vp lint src
+        truncated: false
+      result: passed
+      note:
+        text: 0 errors,1 preexisting warning(ServerCard.test.tsx:11 as any,非本次)
+        truncated: false
+    - name:
+        text: vp test run
+        truncated: false
+      result: passed
+      note:
+        text: 17 文件 94 测试通过
+        truncated: false
+    - name:
+        text: tauri dev HMR
+        truncated: false
+      result: passed
+      note:
+        text: dev server 返回 200,Servers.tsx 与 ServerGroupSection.tsx HMR 成功重载,无错误
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text:
+        A1-A6 拖拽行为仍需静态推理 + 用户本地验证:MCP 浏览器工具不可用(9223/mcp 返回 400,9222 CDP 不可达)。dev
+        server 正在运行(tauri dev,PID 44458),用户可在 Moor 窗口手动验证:从 Ungrouped
+        拖到上方分组(应稳定),同组内拖动排序(应正常),list/grid 双视图。
+      truncated: false
+    - text: 修复依赖一个假设:同组拖动时光标通常落在某张兄弟 server
+        卡片矩形内(因为卡片填充分区内容区)。若用户拖到分区内容区的极端边缘(卡片间隙很窄),可能落到 group droppable;但这种情况下
+        handleDragEnd 分支 1 会因 groupId 相同提前 return(无害,只是不重排),用户再拖一次即可。
+      truncated: false
+  known_limits_truncated: false
+  submitted_at: 2026-08-17T04:50:36.987Z
+blockers: []
+verification:
+  candidate_id: 3804c724-0dea-4bb2-81a5-9f63048509e3
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:1600c2c6-6922-4926-a01c-ebca86d0372a
+  iteration: 2
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: 修复反转 collision 优先级使 server sortable 胜过 group
+      droppable,恢复同组排序(A5)同时保留四种跨组拖拽场景(A1-A4)。GroupDropArea 统一为每分区单一包裹,移除死代码
+      data-group-drop/includeHeader,handleDragEnd 三分支逻辑未改。tsc/lint/test 全部退出 0。
+    truncated: false
+  risks:
+    - text:
+        A5 残留边界:同组拖动时光标在分区头或卡片间间隙(不在兄弟卡片上)→ over.id=group:<own-id> → 分支 1 提前
+        return 不重排。确定性,符合用户意图(落在 header 上不是重排手势);非 round-1 回归。已记录,不阻塞 A5。
+      truncated: false
+    - text:
+        GroupDropArea 矩形严格包含嵌套的 server sortable 矩形;正确性依赖 serverCollisions.length>0
+        检查优先 server id — 静态阅读验证,未运行时验证。
+      truncated: false
+  risks_truncated: false
+  completed_at: 2026-08-17T05:01:12.299Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 1
+    outcome: fail
+    unresolved_ids:
+      - A5
+    summary:
+      text: "A1-A4 与 A6-A7 通过;A5 失败 — group: 优先级使 handleDragEnd 分支 1 在同组拖动时提前
+        return,reorderServers 不可达;需在 collision 排除 active 自己所在组,或在 handleDragEnd
+        对 over=自己组时 fallthrough 到 reorder。"
+      truncated: false
+    completed_at: 2026-08-17T04:43:44.010Z
+  - goal_cycle: 1
+    iteration: 2
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: 修复反转 collision 优先级使 server sortable 胜过 group
+        droppable,恢复同组排序(A5)同时保留四种跨组拖拽场景(A1-A4)。GroupDropArea 统一为每分区单一包裹,移除死代码
+        data-group-drop/includeHeader,handleDragEnd 三分支逻辑未改。tsc/lint/test 全部退出
+        0。
+      truncated: false
+    completed_at: 2026-08-17T05:01:12.299Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-08-17T04:29:24.120Z

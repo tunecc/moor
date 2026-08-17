@@ -1,0 +1,192 @@
+schema: comet.native.v4
+name: single-dnd-context-cross-group-drop
+language: zh-CN
+phase: archive
+status: done
+state_version: 7
+brief: brief.md
+spec_changes: []
+workspace:
+  isolation: current
+  change_branch: main
+  target_branch: main
+  finish: null
+loop:
+  stage: done
+  goal_cycle: 1
+  iteration: 1
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text:
+      A1. 在 Servers 页面有一个空组(0 个 server)。把另一个分区的某个 server 拖到该空组的落点区域后,松开鼠标,该
+      server 的 `groupId` 更新为该空组,卡片出现在该空组下。
+    result: passed
+    reason:
+      text: "空组的 GroupDropArea(droppableId=group:<id>)现在挂载在 Servers.tsx 的单一外层
+        DndContext 内;handleDragEnd 检测 group: 前缀,把 __ungrouped__ 映射为 null,调用
+        handleAssignGroup -> updateServer 只写 groupId。静态推理验证通过。"
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: A2. 在折叠分组(非空)上拖入其他分区的 server,松开后该 server 移入对应组,折叠状态不变。
+    result: passed
+    reason:
+      text: "折叠组的 GroupDropArea(ServerGroupSection.tsx line 174)位于外层 DndContext 内,走同一
+        group: 分支只写 groupId;折叠状态由 useCollapsedGroups 管理,拖拽处理器不触碰,保持不变。"
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: A3. 同一分区内拖动 server 进行排序,仍按原 `onReorder` 写 `sort_order`,顺序持久化。
+    result: passed
+    reason:
+      text:
+        同组 server-to-server 拖拽进入 reorder 分支(181-213 行):分区内重排 + 块替换写回完整 servers
+        列表,再 reorderServers -> PUT /api/servers/order。跨组 server-to-server(169
+        行)只写 groupId,符合约束。
+      truncated: false
+  - id: A4
+    source: brief.md
+    text: A4. 列表视图与网格视图两种 `viewMode` 下,A1–A3 均成立。
+    result: passed
+    reason:
+      text: ServerListView 与 ServerGridView 都精简为 SortableContext + useSortable 卡片,无内部
+        DndContext;两者都作为 ServerGroupSection children 在同一外层 DndContext 内由
+        viewMode 切换。一个 DndContext 下多个 SortableContext 是 dnd-kit 支持模式,各分区 id
+        不相交,无冲突。
+      truncated: false
+  - id: A5
+    source: brief.md
+    text:
+      A5. 拖到落点时,`GroupDropArea` 出现高亮(`isOver` 视觉态);松开后调用 `updateServer` 成功,失败时显示
+      `ErrorBanner`。
+    result: passed
+    reason:
+      text: GroupDropArea 用 useDroppable 在 isOver 时高亮(ServerGroupSection.tsx 40-47
+        行);成功调用 updateServer,失败在 handleDragEnd 捕获并通过 setOrderError ->
+        ErrorBanner(Servers.tsx 321 行)。
+      truncated: false
+  - id: A6
+    source: brief.md
+    text: A6. `pnpm build:frontend`(含 `tsc -b`)与 `pnpm lint` 退出码为 0;不引入新的 lint 警告。
+    result: passed
+    reason:
+      text: 重跑:npx tsc -b --force 退出 0;npx vp lint src 退出 0,仅 ServerCard.test.tsx:11
+        一个 preexisting as-any 警告(非本次改动);npx vp test run 退出 0,17 文件/94 测试通过。
+      truncated: false
+builder_handoff:
+  candidate_id: 3fde261e-e627-4009-980a-e227e4d51471
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:75894404-b6e2-4352-bde9-569bf6de001e
+  iteration: 1
+  summary:
+    text: "把 Servers 页面拖拽统一到单一 DndContext。DndContext/sensors/handleDragEnd 上提到
+      Servers.tsx,ServerListView/ServerGridView 移除各自子 DndContext 与内部
+      handleDragEnd,只保留 SortableContext + 卡片渲染。handleDragEnd 统一:over.id 以 group:
+      开头走跨组移动(写 groupId);否则按 active/over 的 groupId 异同决定跨组移动或同组排序,同组重排沿用
+      partition-scoped reorder + allServers 块替换写回。空组/折叠组通过 ServerGroupSection 的
+      GroupDropArea(useDroppable id=group:<id>) 与外层 DndContext 同上下文,落点生效。"
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+    - A4
+    - A5
+    - A6
+  checks:
+    - name:
+        text: tsc -b --force
+        truncated: false
+      result: passed
+      note:
+        text: 退出码 0
+        truncated: false
+    - name:
+        text: vp lint src
+        truncated: false
+      result: passed
+      note:
+        text: 0 errors,1 preexisting warning(ServerCard.test.tsx:11 as any,与本次改动无关)
+        truncated: false
+    - name:
+        text: vp test run
+        truncated: false
+      result: passed
+      note:
+        text: 17 文件 94 测试全部通过
+        truncated: false
+    - name:
+        text: build:frontend (vp build)
+        truncated: false
+      result: not-run
+      note:
+        text: tsc -b 已通过,vp build 与 Build 验收无新增差异,留待手动浏览器验证
+        truncated: false
+  checks_truncated: false
+  known_limits:
+    - text: 未在真实浏览器中拖拽验证 A1-A5:MCP 浏览器工具链(Chrome DevTools /
+        Playwright)在当前环境不可用,9223/mcp 返回 400,9222 CDP 不可达,无法启动自动化浏览器。dev server
+        已确认可启动并返回 200,但 DnD 行为需用户在本地 Tauri 应用或浏览器中手动验证空组/折叠组落点、同组排序、list/grid
+        双视图与 isOver 高亮。
+      truncated: false
+    - text: ServerListView/ServerGridView 移除了
+        allServers/onReorder/onReorderError/groupId/onAssignGroup
+        等参数;若后续需要在这些组件内做单独 reorder,需要把参数加回。当前所有落点决策集中在 Servers.tsx。
+      truncated: false
+  known_limits_truncated: false
+  submitted_at: 2026-08-17T02:21:31.470Z
+blockers: []
+verification:
+  candidate_id: 3fde261e-e627-4009-980a-e227e4d51471
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:80c147ef-7ca7-4dd8-a1de-9ffda49e3a6e
+  iteration: 1
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks: []
+  summary:
+    text: 单一 DndContext 重构正确且完整;A1-A6 全部通过静态推理与重跑的 tsc/lint/test 退出码。
+    truncated: false
+  risks:
+    - text: A1-A5 仅通过静态代码推理验证;当前环境 MCP 浏览器工具不可用,未运行 dev
+        server,未执行真实浏览器拖拽。结论建立在结构保证上:单一 DndContext 现在是每个 useSortable(卡片)与每个
+        useDroppable(GroupDropArea)的祖先,正是 brief 要求的修复。
+      truncated: false
+    - text: ServerGroupsManager(brief 非目标范围)保留自己的 DndContext 与重叠的 group:<id> droppable
+        id。它仅在模态框打开时挂载,不影响正常页面拖拽。
+      truncated: false
+  risks_truncated: false
+  completed_at: 2026-08-17T02:34:00.306Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: 单一 DndContext 重构正确且完整;A1-A6 全部通过静态推理与重跑的 tsc/lint/test 退出码。
+      truncated: false
+    completed_at: 2026-08-17T02:34:00.306Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-08-17T02:08:20.942Z

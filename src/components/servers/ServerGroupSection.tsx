@@ -33,8 +33,12 @@ interface ServerGroupSectionProps {
 }
 
 /**
- * 空组或折叠分区的可落点区域:作为跨组拖拽的目标。
+ * 整个分区的可落点区域:作为跨组拖拽的目标。
  * droppableId 形如 `group:<id>`(具名组)或 `group:__ungrouped__`。
+ *
+ * `GroupDropArea` 包裹整段分区(分区头 + 内容/空态/折叠态),其矩形覆盖整个分区,
+ * 由外层自定义碰撞检测在光标进入该矩形(且不在任何 server sortable 上)时命中,
+ * 实现稳定的跨组移动。
  */
 function GroupDropArea({ droppableId, children }: { droppableId: string; children: ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
@@ -103,86 +107,86 @@ export function ServerGroupSection({
 
   return (
     <section className="space-y-2" data-group-id={id}>
-      <div
-        className={cn(
-          "flex items-center gap-2 rounded-lg border border-[var(--fg-08)] bg-surface-200/40 px-3 py-2",
-        )}
-      >
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          aria-label={collapsed ? `Expand ${name}` : `Collapse ${name}`}
-          aria-expanded={!collapsed}
-          className="shrink-0 text-[var(--fg-40)] hover:text-cursor-dark transition-colors"
-        >
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
-        <span className="font-headline text-sm font-medium text-cursor-dark truncate">{name}</span>
-        <span className="text-xs text-[var(--fg-40)] tabular-nums">{count}</span>
-
-        <div className="ml-auto flex items-center gap-1">
-          {!isUngrouped && (
-            <>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9"
-                disabled={!canMoveUp}
-                onClick={onMoveUp}
-                title={`Move ${name} up`}
-                aria-label={`Move ${name} up`}
-              >
-                <ArrowUp className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9"
-                disabled={!canMoveDown}
-                onClick={onMoveDown}
-                title={`Move ${name} down`}
-                aria-label={`Move ${name} down`}
-              >
-                <ArrowDown className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9"
-                onClick={startRename}
-                title={`Rename ${name}`}
-                aria-label={`Rename ${name}`}
-              >
-                <Pencil className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 text-[var(--fg-45)] hover:text-error-warm hover:bg-error-warm/10"
-                onClick={() => setDeleteOpen(true)}
-                title={`Delete ${name}`}
-                aria-label={`Delete ${name}`}
-              >
-                <Trash2 className="h-5 w-5" />
-              </Button>
-            </>
+      <GroupDropArea droppableId={`group:${id}`}>
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-lg border border-[var(--fg-08)] bg-surface-200/40 px-3 py-2",
           )}
-        </div>
-      </div>
+        >
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label={collapsed ? `Expand ${name}` : `Collapse ${name}`}
+            aria-expanded={!collapsed}
+            className="shrink-0 text-[var(--fg-40)] hover:text-cursor-dark transition-colors"
+          >
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          <span className="font-headline text-sm font-medium text-cursor-dark truncate">
+            {name}
+          </span>
+          <span className="text-xs text-[var(--fg-40)] tabular-nums">{count}</span>
 
-      {collapsed ? (
-        <GroupDropArea droppableId={`group:${id}`}>
-          <p className="px-3 py-2 font-body text-xs text-[var(--fg-35)]">
-            {count === 0
-              ? "Empty group — drag a server here."
-              : `${count} server${count === 1 ? "" : "s"} (collapsed)`}
-          </p>
-        </GroupDropArea>
-      ) : (
-        <GroupDropArea droppableId={`group:${id}`}>
-          <div className="pl-1">{children}</div>
-        </GroupDropArea>
-      )}
+          <div className="ml-auto flex items-center gap-1">
+            {!isUngrouped && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  disabled={!canMoveUp}
+                  onClick={onMoveUp}
+                  title={`Move ${name} up`}
+                  aria-label={`Move ${name} up`}
+                >
+                  <ArrowUp className="h-5 w-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  disabled={!canMoveDown}
+                  onClick={onMoveDown}
+                  title={`Move ${name} down`}
+                  aria-label={`Move ${name} down`}
+                >
+                  <ArrowDown className="h-5 w-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={startRename}
+                  title={`Rename ${name}`}
+                  aria-label={`Rename ${name}`}
+                >
+                  <Pencil className="h-5 w-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 text-[var(--fg-45)] hover:text-error-warm hover:bg-error-warm/10"
+                  onClick={() => setDeleteOpen(true)}
+                  title={`Delete ${name}`}
+                  aria-label={`Delete ${name}`}
+                >
+                  <Trash2 className="h-5 w-5" />
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {collapsed ? (
+          count === 0 ? (
+            <p className="mt-2 px-3 py-2 font-body text-xs text-[var(--fg-35)]">
+              Empty group — drag a server here.
+            </p>
+          ) : null
+        ) : (
+          <div className="mt-2 pl-1">{children}</div>
+        )}
+      </GroupDropArea>
 
       {/* Rename dialog */}
       <AlertDialog open={renameOpen} onOpenChange={setRenameOpen}>

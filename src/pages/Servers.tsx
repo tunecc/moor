@@ -22,6 +22,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
@@ -31,6 +32,71 @@ import { UNGROUPED_ID } from "@/hooks/useServerGroups";
 import { AddServerForm } from "./servers/AddServerForm";
 import { ConfigImportPanel } from "./servers/ConfigImportPanel";
 import type { Server } from "@moor/types";
+
+// 自定义碰撞检测:优先匹配分区级 `group:<id>` droppable,修复跨组拖拽落点不稳定。
+//
+// closestCenter 只按几何中心距离选唯一目标,父级 GroupDropArea 与子级 server sortable
+// 共存时子级常胜出,导致从 Ungrouped 拖到分组时落点识别时灵时不灵。这里改为:
+// 1) 光标坐标存在时,先看光标落在哪些 server sortable 项矩形内 → 若有,优先返回它们
+//    (按距中心距离排序)。这样同组重排时 over.id 仍是兄弟 server,handleDragEnd 分支 3
+//    可正常执行;
+// 2) 若光标不在任何 server sortable 上(落在分区头/卡片间空白/空组/折叠分区),再看是否
+//    落在 `group:` 前缀的分区级 droppable 矩形内 → 优先返回它(跨组移动);
+// 3) 都不命中 → 回退 closestCenter;
+// 4) 光标坐标缺失(键盘操作等)→ 直接 closestCenter。
+//
+// 关键:server sortable 优先于 group droppable,保证同组排序不被父级 droppable 抢走;
+// 而分区空白区(无 server sortable 覆盖)才落到 group droppable,实现稳定的跨组移动。
+const GROUP_PREFIX = "group:";
+
+const groupAwareCollision: CollisionDetection = (args) => {
+  const { pointerCoordinates, droppableRects, droppableContainers } = args;
+  if (!pointerCoordinates) {
+    return closestCenter(args);
+  }
+
+  const inRect = (rect: { top: number; bottom: number; left: number; right: number }) =>
+    pointerCoordinates.y >= rect.top &&
+    pointerCoordinates.y <= rect.bottom &&
+    pointerCoordinates.x >= rect.left &&
+    pointerCoordinates.x <= rect.right;
+
+  // 1) 光标在某个 server sortable 上 → 优先返回它(同组重排走这条路径)。
+  const serverCollisions: { id: string; value: number }[] = [];
+  // 2) 否则看光标是否在分区级 group droppable 上(分区头/空白/空组/折叠分区)。
+  const groupCollisions: { id: string; value: number }[] = [];
+
+  for (const container of droppableContainers) {
+    const id = String(container.id);
+    const rect = droppableRects.get(container.id);
+    if (!rect) continue;
+    if (!inRect(rect)) continue;
+    const cx = (rect.left + rect.right) / 2;
+    const cy = (rect.top + rect.bottom) / 2;
+    const value = Math.hypot(pointerCoordinates.x - cx, pointerCoordinates.y - cy);
+    if (id.startsWith(GROUP_PREFIX)) {
+      groupCollisions.push({ id, value });
+    } else {
+      serverCollisions.push({ id, value });
+    }
+  }
+
+  if (serverCollisions.length > 0) {
+    serverCollisions.sort((a, b) => a.value - b.value);
+    return serverCollisions.map((c) => ({
+      id: c.id,
+      data: { droppableContainer: droppableContainers.find((d) => d.id === c.id), value: c.value },
+    }));
+  }
+  if (groupCollisions.length > 0) {
+    groupCollisions.sort((a, b) => a.value - b.value);
+    return groupCollisions.map((c) => ({
+      id: c.id,
+      data: { droppableContainer: droppableContainers.find((d) => d.id === c.id), value: c.value },
+    }));
+  }
+  return closestCenter(args);
+};
 
 export function Servers() {
   const {
@@ -369,7 +435,7 @@ export function Servers() {
             ) : (
               <DndContext
                 sensors={sensors}
-                collisionDetection={closestCenter}
+                collisionDetection={groupAwareCollision}
                 onDragEnd={(event) => void handleDragEnd(event)}
               >
                 <div className="space-y-4">

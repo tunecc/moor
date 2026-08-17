@@ -15,12 +15,22 @@ import { useConfigImport } from "@/hooks/useConfigImport";
 import { useServerViewPreferences } from "@/hooks/useServerViewPreferences";
 import { filterServersByName } from "@/lib/server-list";
 import { partitionServersByGroup } from "@/lib/server-groups";
-import { closestCenter, DndContext, type DragEndEvent } from "@dnd-kit/core";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { FileJson, Plus, RefreshCw, ScanSearch, Search } from "lucide-react";
 import { cn, getErrorMessage } from "@/lib/utils";
 import { UNGROUPED_ID } from "@/hooks/useServerGroups";
 import { AddServerForm } from "./servers/AddServerForm";
 import { ConfigImportPanel } from "./servers/ConfigImportPanel";
+import type { Server } from "@moor/types";
 
 export function Servers() {
   const {
@@ -68,6 +78,13 @@ export function Servers() {
   const hasSearch = searchQuery.trim().length > 0;
   const showSearchEmpty = showToolbar && filteredServers.length === 0 && hasSearch;
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
   const handleAdd = useCallback(
     async (config: Parameters<typeof addServer>[0]) => {
       await addServer(config);
@@ -107,24 +124,92 @@ export function Servers() {
     [updateServer],
   );
 
-  // 跨分区拖拽:落到分区头 droppable(`group:<id>`)时,把被拖 server 移到目标组。
-  // 空组或折叠分区没有内部 sortable 项,只有这个 droppable 作为落点。
-  const handleSectionDrop = useCallback(
-    (event: DragEndEvent) => {
+  // 在 allServers 中查找目标 server 所属组(返回其 groupId 或 UNGROUPED_ID)。
+  const groupOf = useCallback((server: Server | undefined): string => {
+    if (!server) return UNGROUPED_ID;
+    return server.groupId ?? UNGROUPED_ID;
+  }, []);
+
+  // 统一拖拽落点处理:
+  // - over.id 以 `group:` 前缀 → 落到分区头/空组/折叠分区的 GroupDropArea,
+  //   跨组移动只写 groupId,不改 sort_order。
+  // - 否则 over 是另一个 server 项:同组则重排 sort_order,跨组则只写 groupId。
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
       const activeId = String(event.active.id);
       const overId = event.over?.id ? String(event.over?.id) : null;
       if (!overId || activeId === overId) return;
-      if (!overId.startsWith("group:")) return;
-      const targetPartitionId = overId.slice("group:".length);
-      const targetGroupId = targetPartitionId === UNGROUPED_ID ? null : targetPartitionId;
-      const active = servers.find((s) => s.id === activeId);
-      if (!active) return;
-      if ((active.groupId ?? null) === targetGroupId) return;
-      void handleAssignGroup(activeId, targetGroupId).catch((err) => {
-        setOrderError(getErrorMessage(err, "Unable to move server"));
-      });
+
+      const activeServer = servers.find((s) => s.id === activeId);
+      if (!activeServer) return;
+
+      // 1) 落到分组落点区域(`group:<id>`)。
+      if (overId.startsWith("group:")) {
+        const targetPartitionId = overId.slice("group:".length);
+        const targetGroupId = targetPartitionId === UNGROUPED_ID ? null : targetPartitionId;
+        if ((activeServer.groupId ?? null) === targetGroupId) return;
+        try {
+          await handleAssignGroup(activeId, targetGroupId);
+        } catch (err) {
+          setOrderError(getErrorMessage(err, "Unable to move server"));
+        }
+        return;
+      }
+
+      // 2) 落到另一个 server 项。
+      const overServer = servers.find((s) => s.id === overId);
+      if (!overServer) return;
+
+      const activeGroup = groupOf(activeServer);
+      const overGroup = groupOf(overServer);
+
+      if (activeGroup !== overGroup) {
+        // 跨组移动:只写 groupId,不改 sort_order。
+        const target = overGroup === UNGROUPED_ID ? null : overGroup;
+        if ((activeServer.groupId ?? null) === target) return;
+        try {
+          await handleAssignGroup(activeId, target);
+        } catch (err) {
+          setOrderError(getErrorMessage(err, "Unable to move server"));
+        }
+        return;
+      }
+
+      // 3) 同组重排:沿用既有 reorder 逻辑,在该分区内重排后写回 allServers。
+      const partition = partitions.find((p) => p.servers.some((s) => s.id === activeId));
+      const scoped = partition?.servers ?? [];
+      const reordered = [...scoped];
+      const oldIndex = reordered.findIndex((s) => s.id === activeId);
+      const newIndex = reordered.findIndex((s) => s.id === overId);
+      if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+      const [moved] = reordered.splice(oldIndex, 1);
+      if (!moved) return;
+      reordered.splice(newIndex, 0, moved);
+
+      // 在 allServers 中以新顺序替换该组 server 块,组外 server 保持原相对顺序。
+      const scopeIds = new Set(reordered.map((s) => s.id));
+      const result: Server[] = [];
+      let pushedGroup = false;
+      for (const s of servers) {
+        if (scopeIds.has(s.id)) {
+          if (!pushedGroup) {
+            result.push(...reordered);
+            pushedGroup = true;
+          }
+        } else {
+          result.push(s);
+        }
+      }
+      if (!pushedGroup) result.push(...reordered);
+
+      setOrderError(null);
+      try {
+        await reorderServers(result);
+      } catch (err) {
+        setOrderError(getErrorMessage(err, "Unable to save server order"));
+      }
     },
-    [servers, handleAssignGroup],
+    [servers, partitions, handleAssignGroup, reorderServers, groupOf],
   );
 
   return (
@@ -282,7 +367,11 @@ export function Servers() {
                 </p>
               </div>
             ) : (
-              <DndContext collisionDetection={closestCenter} onDragEnd={handleSectionDrop}>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(event) => void handleDragEnd(event)}
+              >
                 <div className="space-y-4">
                   {partitions.map((partition, index) => (
                     <ServerGroupSection
@@ -325,34 +414,18 @@ export function Servers() {
                       ) : viewMode === "list" ? (
                         <ServerListView
                           servers={partition.servers}
-                          allServers={servers}
-                          groupId={partition.isUngrouped ? undefined : partition.id}
                           serverActions={serverActions}
-                          onAssignGroup={handleAssignGroup}
                           onStart={startServer}
                           onStop={stopServer}
                           onRemove={removeServer}
-                          onReorder={async (next) => {
-                            setOrderError(null);
-                            await reorderServers(next);
-                          }}
-                          onReorderError={(message) => setOrderError(message)}
                         />
                       ) : (
                         <ServerGridView
                           servers={partition.servers}
-                          allServers={servers}
-                          groupId={partition.isUngrouped ? undefined : partition.id}
                           serverActions={serverActions}
-                          onAssignGroup={handleAssignGroup}
                           onStart={startServer}
                           onStop={stopServer}
                           onRemove={removeServer}
-                          onReorder={async (next) => {
-                            setOrderError(null);
-                            await reorderServers(next);
-                          }}
-                          onReorderError={(message) => setOrderError(message)}
                         />
                       )}
                     </ServerGroupSection>

@@ -20,7 +20,7 @@ import { ServerCard } from "@/components/servers/ServerCard";
 import { getServerIds } from "@/lib/server-list";
 import { cn, getErrorMessage } from "@/lib/utils";
 import { GripVertical } from "lucide-react";
-import type { Server, ServerGroup } from "@moor/types";
+import type { Server } from "@moor/types";
 import type { ServerAction } from "@/hooks/server-patch-utils";
 import { UNGROUPED_ID } from "@/hooks/useServerGroups";
 
@@ -37,8 +37,7 @@ interface ServerListViewProps {
   onReorderError: (message: string) => void;
   /** Optional group id; when provided, reorder is scoped to that group's servers. */
   groupId?: string;
-  /** Available groups + handler passed through to each card's move-to-group control. */
-  groups?: ServerGroup[];
+  /** Cross-group move handler (writes groupId only). */
   onAssignGroup?: (serverId: string, groupId: string | null) => Promise<void>;
 }
 
@@ -48,16 +47,12 @@ function SortableServerCard({
   onStart,
   onStop,
   onRemove,
-  groups,
-  onAssignGroup,
 }: {
   server: Server;
   action: ServerAction | undefined;
   onStart: (id: string) => Promise<void>;
   onStop: (id: string) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
-  groups?: ServerGroup[];
-  onAssignGroup?: (serverId: string, groupId: string | null) => Promise<void>;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: server.id,
@@ -74,8 +69,6 @@ function SortableServerCard({
         server={server}
         action={action}
         isSorting={isDragging}
-        groups={groups}
-        onAssignGroup={onAssignGroup}
         dragHandle={
           <Button
             variant="ghost"
@@ -113,7 +106,6 @@ export function ServerListView({
   onReorder,
   onReorderError,
   groupId,
-  groups,
   onAssignGroup,
 }: ServerListViewProps) {
   const sensors = useSensors(
@@ -201,8 +193,6 @@ export function ServerListView({
               key={server.id}
               server={server}
               action={serverActions[server.id]}
-              groups={groups}
-              onAssignGroup={onAssignGroup}
               onStart={onStart}
               onStop={onStop}
               onRemove={onRemove}

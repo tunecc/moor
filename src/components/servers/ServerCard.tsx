@@ -3,21 +3,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ErrorBanner } from "@/components/shared/ErrorBanner";
-import { OverflowMenu, type OverflowMenuItem } from "@/components/shared/OverflowMenu";
-import {
-  AlertTriangle,
-  Loader2,
-  MoreVertical,
-  Play,
-  Square,
-  Terminal,
-  Trash2,
-  Zap,
-} from "lucide-react";
+import { AlertTriangle, Loader2, Play, Square, Terminal, Trash2, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import type { Server, ServerGroup } from "@moor/types";
+import type { Server } from "@moor/types";
 import type { ServerAction } from "@/hooks/server-patch-utils";
-import { UNGROUPED_ID } from "@/hooks/useServerGroups";
 import { cn, getErrorMessage } from "@/lib/utils";
 
 type RemoveFeedback =
@@ -53,9 +42,6 @@ interface ServerCardProps {
   onStart: (id: string) => Promise<void>;
   onStop: (id: string) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
-  /** Available groups + handler; when provided, the card shows a "move to group" overflow menu. */
-  groups?: ServerGroup[];
-  onAssignGroup?: (serverId: string, groupId: string | null) => Promise<void>;
 }
 
 function getCommandPreview(server: Server): string {
@@ -174,35 +160,6 @@ function LifecycleButton({
   );
 }
 
-function buildGroupMenuItems({
-  groups,
-  currentGroupId,
-  onPick,
-}: {
-  groups: ServerGroup[];
-  currentGroupId: string | null;
-  onPick: (groupId: string | null) => void;
-}): OverflowMenuItem[] {
-  const ungroupedSelected = currentGroupId === null;
-  const items: OverflowMenuItem[] = [
-    {
-      key: UNGROUPED_ID,
-      label: "Ungrouped",
-      selected: ungroupedSelected,
-      onSelect: () => onPick(null),
-    },
-  ];
-  for (const g of groups) {
-    items.push({
-      key: g.id,
-      label: g.name,
-      selected: g.id === currentGroupId,
-      onSelect: () => onPick(g.id),
-    });
-  }
-  return items;
-}
-
 function ServerControls({
   server,
   isStarting,
@@ -212,9 +169,6 @@ function ServerControls({
   onStart,
   onStop,
   onRequestRemove,
-  groups,
-  onAssignGroup,
-  assigningGroup,
 }: {
   server: Server;
   isStarting: boolean;
@@ -224,19 +178,8 @@ function ServerControls({
   onStart: (id: string) => Promise<void>;
   onStop: (id: string) => Promise<void>;
   onRequestRemove: () => void;
-  groups?: ServerGroup[];
-  onAssignGroup?: (serverId: string, groupId: string | null) => Promise<void>;
-  assigningGroup: boolean;
 }) {
   const controlsDisabled = isBusy || isRemoving;
-  const showGroupMenu = !!groups && !!onAssignGroup;
-  const menuItems = showGroupMenu
-    ? buildGroupMenuItems({
-        groups: groups as ServerGroup[],
-        currentGroupId: server.groupId ?? null,
-        onPick: (groupId) => void onAssignGroup?.(server.id, groupId),
-      })
-    : [];
 
   return (
     <div
@@ -265,21 +208,6 @@ function ServerControls({
       >
         {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
       </Button>
-      {showGroupMenu && (
-        <OverflowMenu
-          triggerLabel={`Move ${server.name} to group`}
-          triggerIcon={
-            assigningGroup ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <MoreVertical className="h-4 w-4" />
-            )
-          }
-          disabled={assigningGroup || controlsDisabled}
-          items={menuItems}
-          triggerClassName="h-9 w-9"
-        />
-      )}
     </div>
   );
 }
@@ -355,15 +283,11 @@ export function ServerCard({
   onStart,
   onStop,
   onRemove,
-  groups,
-  onAssignGroup,
 }: ServerCardProps) {
   const isCompact = variant === "compact";
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
-  const [assigningGroup, setAssigningGroup] = useState(false);
-  const [assignError, setAssignError] = useState<string | null>(null);
   const navigate = useNavigate();
   const isRunning = server.status === "running";
   const isError = server.status === "error";
@@ -413,21 +337,6 @@ export function ServerCard({
     setRemoveError(null);
   };
 
-  const handleAssignGroup = async (groupId: string | null) => {
-    if (!onAssignGroup) return;
-    if ((server.groupId ?? null) === groupId) return;
-    setAssigningGroup(true);
-    setAssignError(null);
-    try {
-      await onAssignGroup(server.id, groupId);
-    } catch (err) {
-      setAssignError(getErrorMessage(err, "Unable to move server"));
-    } finally {
-      setAssigningGroup(false);
-    }
-  };
-  void handleAssignGroup;
-
   return (
     <Card
       role="link"
@@ -475,12 +384,8 @@ export function ServerCard({
                 setConfirmingRemove(true);
                 setRemoveError(null);
               }}
-              groups={groups}
-              onAssignGroup={onAssignGroup}
-              assigningGroup={assigningGroup}
             />
           </div>
-          {assignError && <ErrorBanner message={assignError} variant="mono" className="mt-2" />}
           {removeFeedback && (
             <RemoveFeedbackRow
               feedback={removeFeedback}

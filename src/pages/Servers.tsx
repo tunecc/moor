@@ -7,6 +7,7 @@ import { ServersToolbar } from "@/components/servers/ServersToolbar";
 import { ServerListView } from "@/components/servers/ServerListView";
 import { ServerGridView } from "@/components/servers/ServerGridView";
 import { ServerGroupSection } from "@/components/servers/ServerGroupSection";
+import { ServerGroupsManager } from "@/components/servers/ServerGroupsManager";
 import { useServers } from "@/hooks/useServers";
 import { useServerGroups } from "@/hooks/useServerGroups";
 import { useCollapsedGroups } from "@/hooks/useCollapsedGroups";
@@ -47,6 +48,7 @@ export function Servers() {
   const { isCollapsed, toggle: toggleCollapsed } = useCollapsedGroups();
   const [showAdd, setShowAdd] = useState(false);
   const [showJsonImport, setShowJsonImport] = useState(false);
+  const [showGroupsManager, setShowGroupsManager] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const importState = useConfigImport();
@@ -161,6 +163,13 @@ export function Servers() {
               <Plus className="h-4 w-4 mr-2" /> Add Group
             </Button>
             <Button
+              variant="outline"
+              onClick={() => setShowGroupsManager(true)}
+              aria-label="Manage groups"
+            >
+              Manage Groups
+            </Button>
+            <Button
               onClick={() => {
                 setShowJsonImport(false);
                 setShowAdd(true);
@@ -181,6 +190,45 @@ export function Servers() {
 
       {/* Add Server Form */}
       {showAdd && <AddServerForm onAdd={handleAdd} onClose={() => setShowAdd(false)} />}
+
+      <ServerGroupsManager
+        open={showGroupsManager}
+        onOpenChange={setShowGroupsManager}
+        groups={groups}
+        servers={servers}
+        onCreateGroup={async (name) => {
+          try {
+            await createGroup(name);
+          } catch (err) {
+            setOrderError(err instanceof Error ? err.message : "Unable to create group");
+          }
+        }}
+        onRenameGroup={async (id, name) => {
+          try {
+            await renameGroup({ id, name });
+          } catch (err) {
+            setOrderError(err instanceof Error ? err.message : "Unable to rename group");
+            throw err;
+          }
+        }}
+        onDeleteGroup={async (id) => {
+          try {
+            await deleteGroup(id);
+          } catch (err) {
+            setOrderError(err instanceof Error ? err.message : "Unable to delete group");
+            throw err;
+          }
+        }}
+        onReorderGroups={async (next) => {
+          try {
+            await reorderGroups(next);
+          } catch (err) {
+            setOrderError(err instanceof Error ? err.message : "Unable to reorder groups");
+            throw err;
+          }
+        }}
+        onAssignGroup={handleAssignGroup}
+      />
 
       {orderError && <ErrorBanner message={orderError} className="animate-fade-in" />}
       {createError && <ErrorBanner message={createError} className="animate-fade-in" />}
@@ -280,7 +328,6 @@ export function Servers() {
                           allServers={servers}
                           groupId={partition.isUngrouped ? undefined : partition.id}
                           serverActions={serverActions}
-                          groups={groups}
                           onAssignGroup={handleAssignGroup}
                           onStart={startServer}
                           onStop={stopServer}
@@ -297,7 +344,6 @@ export function Servers() {
                           allServers={servers}
                           groupId={partition.isUngrouped ? undefined : partition.id}
                           serverActions={serverActions}
-                          groups={groups}
                           onAssignGroup={handleAssignGroup}
                           onStart={startServer}
                           onStop={stopServer}

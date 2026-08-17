@@ -179,7 +179,9 @@ export function ServerGroupSection({
           </p>
         </GroupDropArea>
       ) : (
-        <div className="pl-1">{children}</div>
+        <GroupDropArea droppableId={`group:${id}`}>
+          <div className="pl-1">{children}</div>
+        </GroupDropArea>
       )}
 
       {/* Rename dialog */}

@@ -14,7 +14,7 @@ import { useCollapsedGroups } from "@/hooks/useCollapsedGroups";
 import { useConfigImport } from "@/hooks/useConfigImport";
 import { useServerViewPreferences } from "@/hooks/useServerViewPreferences";
 import { filterServersByName } from "@/lib/server-list";
-import { partitionServersByGroup } from "@/lib/server-groups";
+import { getStartableServerIds, partitionServersByGroup } from "@/lib/server-groups";
 import {
   closestCenter,
   DndContext,
@@ -188,6 +188,15 @@ export function Servers() {
       await updateServer({ id: serverId, updates: { groupId } });
     },
     [updateServer],
+  );
+
+  // 一键启动分组内所有可启动(stopped/error)的服务器;running/starting 不重复触发。
+  const handleStartAll = useCallback(
+    async (partitionServers: Server[]) => {
+      const startableIds = getStartableServerIds(partitionServers);
+      await Promise.all(startableIds.map((id) => startServer(id)));
+    },
+    [startServer],
   );
 
   // 在 allServers 中查找目标 server 所属组(返回其 groupId 或 UNGROUPED_ID)。
@@ -472,6 +481,18 @@ export function Servers() {
                       }}
                       onMoveUp={() => void handleMoveGroup(index, -1)}
                       onMoveDown={() => void handleMoveGroup(index, 1)}
+                      onStartAll={
+                        partition.isUngrouped
+                          ? undefined
+                          : () => void handleStartAll(partition.servers)
+                      }
+                      startAllDisabled={
+                        partition.isUngrouped
+                          ? true
+                          : !partition.servers.some(
+                              (server) => server.status === "stopped" || server.status === "error",
+                            )
+                      }
                     >
                       {partition.servers.length === 0 ? (
                         <p className="px-2 py-3 font-body text-xs text-[var(--fg-35)]">

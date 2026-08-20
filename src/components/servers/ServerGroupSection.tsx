@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,7 +12,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useDroppable } from "@dnd-kit/core";
-import { ChevronDown, ChevronRight, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Pencil,
+  Play,
+  Trash2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ServerGroup } from "@moor/types";
 
@@ -29,6 +38,8 @@ interface ServerGroupSectionProps {
   onDelete: () => Promise<void>;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onStartAll?: () => Promise<void> | void;
+  startAllDisabled?: boolean;
   children: ReactNode;
 }
 
@@ -68,6 +79,8 @@ export function ServerGroupSection({
   onDelete,
   onMoveUp,
   onMoveDown,
+  onStartAll,
+  startAllDisabled = false,
   children,
 }: ServerGroupSectionProps) {
   const [renameOpen, setRenameOpen] = useState(false);
@@ -75,6 +88,7 @@ export function ServerGroupSection({
   const [renameBusy, setRenameBusy] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [startAllBusy, setStartAllBusy] = useState(false);
 
   const startRename = () => {
     setRenameValue(name);
@@ -105,29 +119,67 @@ export function ServerGroupSection({
     }
   };
 
+  const handleStartAll = async () => {
+    if (!onStartAll) return;
+    setStartAllBusy(true);
+    try {
+      await onStartAll();
+    } finally {
+      setStartAllBusy(false);
+    }
+  };
+
+  const handleHeaderKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onToggleCollapse();
+    }
+  };
+
   return (
     <section className="space-y-2" data-group-id={id}>
       <GroupDropArea droppableId={`group:${id}`}>
         <div
+          role="button"
+          tabIndex={0}
+          onClick={onToggleCollapse}
+          onKeyDown={handleHeaderKeyDown}
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? "Expand" : "Collapse"} ${name}`}
           className={cn(
-            "flex items-center gap-2 rounded-lg border border-[var(--fg-08)] bg-surface-200/40 px-3 py-2",
+            "flex items-center gap-2 rounded-lg border border-[var(--fg-08)] bg-surface-200/40 px-3 py-2 cursor-pointer select-none",
           )}
         >
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            aria-label={collapsed ? `Expand ${name}` : `Collapse ${name}`}
-            aria-expanded={!collapsed}
-            className="shrink-0 text-[var(--fg-40)] hover:text-cursor-dark transition-colors"
-          >
+          <span className="shrink-0 text-[var(--fg-40)]" aria-hidden="true">
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
+          </span>
           <span className="font-headline text-sm font-medium text-cursor-dark truncate">
             {name}
           </span>
           <span className="text-xs text-[var(--fg-40)] tabular-nums">{count}</span>
 
-          <div className="ml-auto flex items-center gap-1">
+          <div
+            className="ml-auto flex items-center gap-1"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {!isUngrouped && onStartAll && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-[var(--fg-45)] hover:text-success-muted hover:bg-success-muted/10"
+                disabled={startAllBusy || startAllDisabled}
+                onClick={() => void handleStartAll()}
+                title={`Start all servers in ${name}`}
+                aria-label={`Start all servers in ${name}`}
+              >
+                {startAllBusy ? (
+                  <Loader2 className="h-[18px] w-[18px] animate-spin" />
+                ) : (
+                  <Play className="h-[18px] w-[18px]" />
+                )}
+              </Button>
+            )}
             {!isUngrouped && (
               <>
                 <Button

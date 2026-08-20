@@ -56,6 +56,18 @@ The API exposes `GET /api/server-groups`, `POST /api/server-groups` returning 20
 
 The Servers page partitions filtered servers by group: named groups by `sortOrder` and Ungrouped last. Each partition has a header with name, server count, rename and delete controls (Ungrouped hides rename/delete), and collapse state persisted in `localStorage` key `moor.servers.collapsedGroups`, shared across grid and list views. Group order is adjusted via header up/down buttons. Search filters across groups by name; empty groups show an empty state; both grid and list views render the same partitions and empty states.
 
+## Scenario: group start all control
+
+Each named group header renders a Start all icon button (Play icon, labelled `Start all servers in <name>`). The Ungrouped partition does not render it, matching how rename/delete/up/down controls are hidden for Ungrouped. The button is disabled when the group is empty or when no server in the group is in `stopped` or `error` status.
+
+## Scenario: group start all behavior
+
+Clicking Start all on a named group starts every server in that group that is currently `stopped` or `error`, using the existing single-server start action. Servers that are already `running` or `starting` are not re-triggered. The starts are issued concurrently; there is no new backend endpoint. A server start failure surfaces through the existing per-server error status/error banner behavior.
+
+## Scenario: header row collapse toggle
+
+The entire partition header row (chevron area, name, count, and blank space) is clickable to toggle that partition's collapse state; pressing Enter or Space while the header row itself is focused also toggles it. The rename, delete, up/down, and Start all controls do not toggle collapse when clicked or activated. Both named groups and Ungrouped follow the same row-click behavior; Ungrouped simply has no management/Start all controls to exclude.
+
 ## Scenario: server card has no group controls
 
 A server card's control area contains only start/stop and remove buttons. The card never renders an inline group selector, an overflow menu, or any other group-management affordance. The card does not accept `groups` or `onAssignGroup` props. The card keeps its original compact height regardless of context.
@@ -98,4 +110,4 @@ An empty named group inside the panel renders its drop area as an active drop ta
 
 ## Scenario: non-regression
 
-Profile, ProfileServer, ToolDiscovery, Audit, Config Import, and server start/stop/drag-reorder behaviors are unchanged. Config Import keeps its existing logic; imported servers default to Ungrouped. Click-to-details, Enter/Space navigation, remove confirmation, and drag-handle click suppression continue to behave as before. Same-group drag in list/grid still reorders; cross-group drag still writes `groupId` only.
+Profile, ProfileServer, ToolDiscovery, Audit, Config Import, and server start/stop/drag-reorder behaviors are unchanged. Config Import keeps its existing logic; imported servers default to Ungrouped. Click-to-details, Enter/Space navigation, remove confirmation, and drag-handle click suppression continue to behave as before. Same-group drag in list/grid still reorders; cross-group drag still writes `groupId` only. The Start all control and header row collapse do not change the underlying per-server start/stop semantics or the grouping data model.

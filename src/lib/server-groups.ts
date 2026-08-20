@@ -45,6 +45,13 @@ export function partitionServersByGroup(
   return partitions;
 }
 
+/** 返回分区内可一键启动(stopped/error)的 server id;running/starting 不重复触发。 */
+export function getStartableServerIds(servers: Server[]): string[] {
+  return servers
+    .filter((server) => server.status === "stopped" || server.status === "error")
+    .map((server) => server.id);
+}
+
 export function getReorderedGroups<T extends { id: string }>(
   groups: T[],
   activeId: string,

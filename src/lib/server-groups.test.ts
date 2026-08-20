@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { partitionServersByGroup, getReorderedGroups } from "@/lib/server-groups";
+import {
+  getStartableServerIds,
+  getReorderedGroups,
+  partitionServersByGroup,
+} from "@/lib/server-groups";
 import { UNGROUPED_ID } from "@/hooks/useServerGroups";
 import type { Server, ServerGroup } from "@moor/types";
 
@@ -68,6 +72,26 @@ describe("partitionServersByGroup", () => {
     const moved = partitionServersByGroup([makeServer("a", "g2")], groups);
     expect(moved[1].servers.map((s) => s.id)).toEqual(["a"]);
     expect(moved[0].servers).toHaveLength(0);
+  });
+});
+
+describe("getStartableServerIds", () => {
+  it("returns only stopped and error servers", () => {
+    const servers = [
+      { ...makeServer("a"), status: "stopped" as const },
+      { ...makeServer("b"), status: "error" as const },
+      { ...makeServer("c"), status: "running" as const },
+      { ...makeServer("d"), status: "starting" as const },
+    ];
+    expect(getStartableServerIds(servers)).toEqual(["a", "b"]);
+  });
+
+  it("returns an empty array when no server is startable", () => {
+    const servers = [
+      { ...makeServer("a"), status: "running" as const },
+      { ...makeServer("b"), status: "starting" as const },
+    ];
+    expect(getStartableServerIds(servers)).toEqual([]);
   });
 });
 

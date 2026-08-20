@@ -1,0 +1,293 @@
+schema: comet.native.v4
+name: server-group-grid-align-stop-all
+language: zh-CN
+phase: archive
+status: done
+state_version: 7
+brief: brief.md
+spec_changes: []
+workspace:
+  isolation: current
+  change_branch: main
+  target_branch: main
+  finish: null
+loop:
+  stage: done
+  goal_cycle: 1
+  iteration: 1
+  attempt: 1
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: null
+acceptance:
+  - id: A1
+    source: brief.md
+    text: "**A1 网格使用 auto-fill 不拉伸**：`ServerGridView` 渲染的网格容器 `gridTemplateColumns`
+      含 `auto-fill`（非 `auto-fit`），使未占满的行保留空轨道、卡片不拉伸。"
+    result: passed
+    reason:
+      text: ServerGridView.tsx:74 gridTemplateColumns 使用 repeat(auto-fill, ...)；git
+        diff 确认由 auto-fit 改为 auto-fill。
+      truncated: false
+  - id: A2
+    source: brief.md
+    text: "**A2 少量服务器留空对齐**：一个分组只有 1 或 2
+      个服务器时，其卡片宽度与「占满一行的分组」的卡片宽度一致（同一列宽），剩余位置留空，而不是把 1–2 张卡片拉伸成整行。"
+    result: passed
+    reason:
+      text:
+        auto-fill + 固定 minmax 列宽是「未占满行留空不拉伸」的标准做法：浏览器按容器宽度与 min 轨道尺寸生成最多 3 列轨道，1–2
+        张卡片只占前 1–2 轨道，剩余轨道保留为空、卡片宽度与占满行分组一致；auto-fit 才会折叠并拉伸。各分组各自渲染独立
+        ServerGridView，但容器宽度一致（同页宽 + 同样 pl-1），故列数与列宽一致。
+      truncated: false
+  - id: A3
+    source: brief.md
+    text: "**A3 list 视图不回归**：list 视图仍为纵向堆叠，不引入网格列模板。"
+    result: passed
+    reason:
+      text: ServerListView.tsx:78 仍为 space-y-2 纵向堆叠、无 grid 模板；git diff
+        未触及该文件；Servers.tsx list 分支沿用 ServerListView。
+      truncated: false
+  - id: A4
+    source: brief.md
+    text:
+      "**A4 具名分组显示 Stop all 按钮**：渲染 `ServerGroupSection`（非 Ungrouped）时，分区头操作区在
+      Start all 旁包含一个 `Square` 图标按钮，`aria-label`/`title` 含 `Stop all servers in
+      <name>`。"
+    result: passed
+    reason:
+      text: ServerGroupSection.tsx:199-215 在 Start all 后渲染 Square
+        图标按钮，title/aria-label 均为 Stop all servers in ${name}，hover 为 error-warm
+        色。测试 renders a stop all button 通过。
+      truncated: false
+  - id: A5
+    source: brief.md
+    text:
+      "**A5 Ungrouped 不显示 Stop all**：`isUngrouped` 为 true 时，分区头不渲染 Stop all（也不渲染
+      Start all/上移/下移/重命名/删除）。"
+    result: passed
+    reason:
+      text: Start all(182)/Stop all(199)/Move-Rename-Delete(216) 均以 !isUngrouped
+        守卫；Servers.tsx 对 isUngrouped 传 onStopAll/onStartAll = undefined。测试 does
+        not render ... for Ungrouped 通过。
+      truncated: false
+  - id: A6
+    source: brief.md
+    text: "**A6 Stop all 只停止运行中/启动中服务器**：给定分组内 server 状态分别为
+      `running`、`starting`、`stopped`、`error`，点击 Stop all 后只对 `running` 和
+      `starting` 的 server 调用一次 `onStopAll`（该回调内部并发调用各自的 `stopServer`），不重复触发
+      `stopped`/`error`。"
+    result: passed
+    reason:
+      text: Servers.tsx handleStopAll 调 getStoppableServerIds 后
+        Promise.all(stopServer(id))；server-groups.ts 只过滤
+        running/starting，stopped/error 排除。测试 returns only running and starting
+        servers 通过。
+      truncated: false
+  - id: A7
+    source: brief.md
+    text: "**A7 空组或无运行中服务器的 Stop all 禁用**：分组内 0 个 server，或所有 server 都为
+      `stopped`/`error`，Stop all 按钮为 disabled。"
+    result: passed
+    reason:
+      text: "Servers.tsx stopAllDisabled = isUngrouped ? true :
+        getStoppableServerIds(...).length === 0。具名空组 onStopAll 有值→按钮渲染且
+        disabled；全 stopped/error 同理。测试 disables stop all when stopAllDisabled is
+        true 通过。"
+      truncated: false
+  - id: A8
+    source: brief.md
+    text: "**A8 Stop all 点击不触发折叠**：点击 Stop all 按钮只执行停止逻辑，不调用 `onToggleCollapse`。"
+    result: passed
+    reason:
+      text: ServerGroupSection.tsx:178-181 按钮区容器 onClick stopPropagation，Stop all
+        在该容器内，点击不冒泡到 onToggleCollapse。测试 calls onStopAll once and does not
+        toggle collapse 通过。
+      truncated: false
+  - id: A9
+    source: brief.md
+    text: "**A9 Start all 行为不回归**：具名分组仍渲染 Start all（`Play` 图标，`Start all servers in
+      <name>`），点击只启动 `stopped`/`error` 服务器，Ungrouped 不显示；Start all 与 Stop all
+      各自独立 busy/disabled。"
+    result: passed
+    reason:
+      text: Start all 用 Play 图标、Start all servers in ${name}；handleStartAll 走
+        getStartableServerIds(stopped/error)；Ungrouped 传 undefined
+        不渲染；startAllBusy/stopAllBusy 为独立
+        useState，startAllDisabled/stopAllDisabled 独立计算。相关测试通过。
+      truncated: false
+  - id: A10
+    source: brief.md
+    text: "**A10 键盘与折叠不回归**：分区头整行点击/Enter/Space 折叠；Start all、Stop
+      all、上移/下移/重命名/删除按钮点击或键盘激活时不触发折叠。"
+    result: passed
+    reason:
+      text: handleHeaderKeyDown(148-154) 仅 event.target===event.currentTarget 时
+        Enter/Space 折叠；按钮区 onClick stopPropagation(180)。toggles collapse / does
+        not toggle collapse / Enter-Space / inner-control 四项测试通过。
+      truncated: false
+builder_handoff:
+  candidate_id: 664b0d93-91a2-4845-a7eb-a30b79f51513
+  identity_provider: skill-coordinated
+  builder_execution_ref: skill-coordinated:builder:ca0070e2-6db9-44b7-bf75-37770b04b38a
+  iteration: 1
+  summary:
+    text: 实现 Servers 页分组网格与分组头批量停止：ServerGridView 改为
+      auto-fill，避免少量卡片在网格视图中拉伸占满整行；ServerGroupSection 为具名分组新增 Stop all 按钮（Square
+      图标、error hover、独立 busy/disabled），并保持按钮点击/键盘激活不触发折叠；Servers 页新增
+      handleStopAll，复用现有 stopServer 并发停止 running/starting 服务器，同时沿用
+      getStartableServerIds 并新增 getStoppableServerIds 统一启停筛选。补充了
+      ServerGroupSection 与 server-groups 的测试覆盖 Stop all 显隐、禁用、点击语义，以及 stoppable
+      状态筛选。
+    truncated: false
+  addressed_acceptance_ids:
+    - A1
+    - A3
+    - A4
+    - A5
+    - A6
+    - A7
+    - A8
+    - A9
+    - A10
+  checks:
+    - name:
+        text: pnpm exec vp lint src/components/servers/ServerGridView.tsx
+          src/components/servers/ServerGroupSection.tsx src/pages/Servers.tsx
+          src/lib/server-groups.ts
+          src/components/servers/ServerGroupSection.test.tsx
+          src/lib/server-groups.test.ts
+        truncated: false
+      result: passed
+      note: null
+    - name:
+        text: pnpm exec tsc -b
+        truncated: false
+      result: passed
+      note: null
+    - name:
+        text: pnpm exec vp test src/components/servers/ServerGroupSection.test.tsx
+          src/lib/server-groups.test.ts
+        truncated: false
+      result: passed
+      note: null
+  checks_truncated: false
+  known_limits:
+    - text: A2 为网格布局的运行时视觉结果，本轮仅通过实现方式（auto-fill）与相关代码路径间接满足，尚未做浏览器手动验收。
+      truncated: false
+  known_limits_truncated: false
+  submitted_at: 2026-08-20T08:43:47.879Z
+blockers: []
+verification:
+  candidate_id: 664b0d93-91a2-4845-a7eb-a30b79f51513
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:027c6071-8d1c-4442-a8a0-b6a0486cd3bf
+  iteration: 1
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: pass
+  checks:
+    - id: lint
+      name:
+        text: lint
+        truncated: false
+      argv_display:
+        - text: exec
+          truncated: false
+        - text: vp
+          truncated: false
+        - text: lint
+          truncated: false
+        - text: src/components/servers/ServerGridView.tsx
+          truncated: false
+        - text: src/components/servers/ServerGroupSection.tsx
+          truncated: false
+        - text: src/pages/Servers.tsx
+          truncated: false
+        - text: src/lib/server-groups.ts
+          truncated: false
+        - text: src/components/servers/ServerGroupSection.test.tsx
+          truncated: false
+        - text: src/lib/server-groups.test.ts
+          truncated: false
+      argv_truncated: false
+      cwd_ref: .
+      status: passed
+      exit_code: 0
+      duration_ms: 1155
+    - id: typecheck
+      name:
+        text: typecheck
+        truncated: false
+      argv_display:
+        - text: exec
+          truncated: false
+        - text: tsc
+          truncated: false
+        - text: -b
+          truncated: false
+      argv_truncated: false
+      cwd_ref: .
+      status: passed
+      exit_code: 0
+      duration_ms: 2888
+    - id: test
+      name:
+        text: test
+        truncated: false
+      argv_display:
+        - text: exec
+          truncated: false
+        - text: vp
+          truncated: false
+        - text: test
+          truncated: false
+        - text: src/components/servers/ServerGroupSection.test.tsx
+          truncated: false
+        - text: src/lib/server-groups.test.ts
+          truncated: false
+      argv_truncated: false
+      cwd_ref: .
+      status: passed
+      exit_code: 0
+      duration_ms: 1451
+  summary:
+    text:
+      10 项全部通过：网格 auto-fill 已生效、Stop all 仅具名分组渲染并只停 running/starting、Start all
+      行为不回归、空组/Ungrouped 与键盘折叠逻辑均符合语义；22 条测试真实通过。
+    truncated: false
+  risks:
+    - text: ServerGroupsManager.tsx:322,432 仍用 auto-fit，但 brief Non-goals
+        明确排除管理面板，不视为回归。
+      truncated: false
+  risks_truncated: false
+  completed_at: 2026-08-20T10:49:16.361Z
+history:
+  - goal_cycle: 1
+    iteration: 1
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text:
+        10 项全部通过：网格 auto-fill 已生效、Stop all 仅具名分组渲染并只停 running/starting、Start all
+        行为不回归、空组/Ungrouped 与键盘折叠逻辑均符合语义；22 条测试真实通过。
+      truncated: false
+    completed_at: 2026-08-20T10:49:16.361Z
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pass
+verification_report: verification.md
+archived: true
+created_at: 2026-08-20T07:55:16.602Z

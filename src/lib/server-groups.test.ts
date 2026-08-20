@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
-  getStartableServerIds,
   getReorderedGroups,
+  getStartableServerIds,
+  getStoppableServerIds,
   partitionServersByGroup,
 } from "@/lib/server-groups";
 import { UNGROUPED_ID } from "@/hooks/useServerGroups";
@@ -92,6 +93,26 @@ describe("getStartableServerIds", () => {
       { ...makeServer("b"), status: "starting" as const },
     ];
     expect(getStartableServerIds(servers)).toEqual([]);
+  });
+});
+
+describe("getStoppableServerIds", () => {
+  it("returns only running and starting servers", () => {
+    const servers = [
+      { ...makeServer("a"), status: "running" as const },
+      { ...makeServer("b"), status: "starting" as const },
+      { ...makeServer("c"), status: "stopped" as const },
+      { ...makeServer("d"), status: "error" as const },
+    ];
+    expect(getStoppableServerIds(servers)).toEqual(["a", "b"]);
+  });
+
+  it("returns an empty array when no server is stoppable", () => {
+    const servers = [
+      { ...makeServer("a"), status: "stopped" as const },
+      { ...makeServer("b"), status: "error" as const },
+    ];
+    expect(getStoppableServerIds(servers)).toEqual([]);
   });
 });
 

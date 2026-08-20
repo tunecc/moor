@@ -20,6 +20,7 @@ import {
   Loader2,
   Pencil,
   Play,
+  Square,
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,9 @@ interface ServerGroupSectionProps {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onStartAll?: () => Promise<void> | void;
+  onStopAll?: () => Promise<void> | void;
   startAllDisabled?: boolean;
+  stopAllDisabled?: boolean;
   children: ReactNode;
 }
 
@@ -80,7 +83,9 @@ export function ServerGroupSection({
   onMoveUp,
   onMoveDown,
   onStartAll,
+  onStopAll,
   startAllDisabled = false,
+  stopAllDisabled = false,
   children,
 }: ServerGroupSectionProps) {
   const [renameOpen, setRenameOpen] = useState(false);
@@ -89,6 +94,7 @@ export function ServerGroupSection({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [startAllBusy, setStartAllBusy] = useState(false);
+  const [stopAllBusy, setStopAllBusy] = useState(false);
 
   const startRename = () => {
     setRenameValue(name);
@@ -126,6 +132,16 @@ export function ServerGroupSection({
       await onStartAll();
     } finally {
       setStartAllBusy(false);
+    }
+  };
+
+  const handleStopAll = async () => {
+    if (!onStopAll) return;
+    setStopAllBusy(true);
+    try {
+      await onStopAll();
+    } finally {
+      setStopAllBusy(false);
     }
   };
 
@@ -177,6 +193,23 @@ export function ServerGroupSection({
                   <Loader2 className="h-[18px] w-[18px] animate-spin" />
                 ) : (
                   <Play className="h-[18px] w-[18px]" />
+                )}
+              </Button>
+            )}
+            {!isUngrouped && onStopAll && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-[var(--fg-45)] hover:text-error-warm hover:bg-error-warm/10"
+                disabled={stopAllBusy || stopAllDisabled}
+                onClick={() => void handleStopAll()}
+                title={`Stop all servers in ${name}`}
+                aria-label={`Stop all servers in ${name}`}
+              >
+                {stopAllBusy ? (
+                  <Loader2 className="h-[18px] w-[18px] animate-spin" />
+                ) : (
+                  <Square className="h-[18px] w-[18px]" />
                 )}
               </Button>
             )}

@@ -14,7 +14,11 @@ import { useCollapsedGroups } from "@/hooks/useCollapsedGroups";
 import { useConfigImport } from "@/hooks/useConfigImport";
 import { useServerViewPreferences } from "@/hooks/useServerViewPreferences";
 import { filterServersByName } from "@/lib/server-list";
-import { getStartableServerIds, partitionServersByGroup } from "@/lib/server-groups";
+import {
+  getStartableServerIds,
+  getStoppableServerIds,
+  partitionServersByGroup,
+} from "@/lib/server-groups";
 import {
   closestCenter,
   DndContext,
@@ -197,6 +201,15 @@ export function Servers() {
       await Promise.all(startableIds.map((id) => startServer(id)));
     },
     [startServer],
+  );
+
+  // 一键停止分组内所有可停止(running/starting)的服务器;stopped/error 不重复触发。
+  const handleStopAll = useCallback(
+    async (partitionServers: Server[]) => {
+      const stoppableIds = getStoppableServerIds(partitionServers);
+      await Promise.all(stoppableIds.map((id) => stopServer(id)));
+    },
+    [stopServer],
   );
 
   // 在 allServers 中查找目标 server 所属组(返回其 groupId 或 UNGROUPED_ID)。
@@ -486,12 +499,20 @@ export function Servers() {
                           ? undefined
                           : () => void handleStartAll(partition.servers)
                       }
+                      onStopAll={
+                        partition.isUngrouped
+                          ? undefined
+                          : () => void handleStopAll(partition.servers)
+                      }
                       startAllDisabled={
                         partition.isUngrouped
                           ? true
-                          : !partition.servers.some(
-                              (server) => server.status === "stopped" || server.status === "error",
-                            )
+                          : getStartableServerIds(partition.servers).length === 0
+                      }
+                      stopAllDisabled={
+                        partition.isUngrouped
+                          ? true
+                          : getStoppableServerIds(partition.servers).length === 0
                       }
                     >
                       {partition.servers.length === 0 ? (

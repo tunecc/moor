@@ -71,7 +71,7 @@ export function ServerGridView({
       <div
         className="grid gap-3"
         style={{
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100% / 3 - 8px, 260px), 1fr))",
+          gridTemplateColumns: "repeat(auto-fill, minmax(min(100% / 3 - 8px, 260px), 1fr))",
         }}
       >
         {servers.map((server) => (

@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import { DndContext } from "@dnd-kit/core";
 import { ServerGroupSection } from "@/components/servers/ServerGroupSection";
 
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const noop = vi.fn(async () => undefined);
 
@@ -17,7 +17,9 @@ interface MountOptions {
   canMoveUp?: boolean;
   canMoveDown?: boolean;
   onStartAll?: (() => Promise<void>) | undefined;
+  onStopAll?: (() => Promise<void>) | undefined;
   startAllDisabled?: boolean;
+  stopAllDisabled?: boolean;
 }
 
 const mounted: Array<{ root: ReturnType<typeof createRoot>; container: HTMLDivElement }> = [];
@@ -35,6 +37,8 @@ function mount(options: MountOptions = {}) {
   const onMoveDown = vi.fn();
   const onStartAll =
     options.onStartAll === undefined ? vi.fn(async () => undefined) : options.onStartAll;
+  const onStopAll =
+    options.onStopAll === undefined ? vi.fn(async () => undefined) : options.onStopAll;
 
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -57,7 +61,9 @@ function mount(options: MountOptions = {}) {
           onMoveUp={onMoveUp}
           onMoveDown={onMoveDown}
           onStartAll={onStartAll}
+          onStopAll={onStopAll}
           startAllDisabled={options.startAllDisabled ?? false}
+          stopAllDisabled={options.stopAllDisabled ?? false}
         >
           <div data-testid="content">content</div>
         </ServerGroupSection>
@@ -66,7 +72,7 @@ function mount(options: MountOptions = {}) {
   });
 
   mounted.push({ root, container });
-  return { container, onToggleCollapse, onMoveUp, onMoveDown, onStartAll };
+  return { container, onToggleCollapse, onMoveUp, onMoveDown, onStartAll, onStopAll };
 }
 
 function getStartAllButton(container: HTMLElement, name = "Dev") {
@@ -75,7 +81,13 @@ function getStartAllButton(container: HTMLElement, name = "Dev") {
   );
 }
 
-describe("ServerGroupSection start all", () => {
+function getStopAllButton(container: HTMLElement, name = "Dev") {
+  return container.querySelector<HTMLButtonElement>(
+    `button[aria-label="Stop all servers in ${name}"]`,
+  );
+}
+
+describe("ServerGroupSection group actions", () => {
   it("renders a start all button for a named group", () => {
     const { container } = mount({ count: 2 });
     const button = getStartAllButton(container);
@@ -83,17 +95,30 @@ describe("ServerGroupSection start all", () => {
     expect(button?.getAttribute("title")).toBe("Start all servers in Dev");
   });
 
-  it("does not render start all, move, rename, or delete for Ungrouped", () => {
+  it("does not render start all, stop all, move, rename, or delete for Ungrouped", () => {
     const { container } = mount({ isUngrouped: true, count: 2 });
     expect(getStartAllButton(container, "Ungrouped")).toBeNull();
+    expect(getStopAllButton(container, "Ungrouped")).toBeNull();
     expect(container.querySelector('button[aria-label^="Move"]')).toBeNull();
     expect(container.querySelector('button[aria-label^="Rename"]')).toBeNull();
     expect(container.querySelector('button[aria-label^="Delete"]')).toBeNull();
   });
 
+  it("renders a stop all button for a named group", () => {
+    const { container } = mount({ count: 2 });
+    const button = getStopAllButton(container);
+    expect(button).not.toBeNull();
+    expect(button?.getAttribute("title")).toBe("Stop all servers in Dev");
+  });
+
   it("disables start all when startAllDisabled is true", () => {
     const { container } = mount({ count: 2, startAllDisabled: true });
     expect(getStartAllButton(container)?.disabled).toBe(true);
+  });
+
+  it("disables stop all when stopAllDisabled is true", () => {
+    const { container } = mount({ count: 2, stopAllDisabled: true });
+    expect(getStopAllButton(container)?.disabled).toBe(true);
   });
 
   it("calls onStartAll once and does not toggle collapse when clicked", async () => {
@@ -107,6 +132,20 @@ describe("ServerGroupSection start all", () => {
     });
 
     expect(onStartAll).toHaveBeenCalledTimes(1);
+    expect(onToggleCollapse).not.toHaveBeenCalled();
+  });
+
+  it("calls onStopAll once and does not toggle collapse when clicked", async () => {
+    const onStopAll = vi.fn(async () => undefined);
+    const { container, onToggleCollapse } = mount({ count: 2, onStopAll });
+    const button = getStopAllButton(container);
+    expect(button).not.toBeNull();
+
+    await act(async () => {
+      button?.click();
+    });
+
+    expect(onStopAll).toHaveBeenCalledTimes(1);
     expect(onToggleCollapse).not.toHaveBeenCalled();
   });
 });

@@ -52,6 +52,13 @@ export function getStartableServerIds(servers: Server[]): string[] {
     .map((server) => server.id);
 }
 
+/** 返回分区内可一键停止(running/starting)的 server id;stopped/error 不重复触发。 */
+export function getStoppableServerIds(servers: Server[]): string[] {
+  return servers
+    .filter((server) => server.status === "running" || server.status === "starting")
+    .map((server) => server.id);
+}
+
 export function getReorderedGroups<T extends { id: string }>(
   groups: T[],
   activeId: string,

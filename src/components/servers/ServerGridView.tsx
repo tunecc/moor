@@ -68,7 +68,12 @@ export function ServerGridView({
 
   return (
     <SortableContext items={ids} strategy={rectSortingStrategy}>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div
+        className="grid gap-3"
+        style={{
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100% / 3 - 8px, 260px), 1fr))",
+        }}
+      >
         {servers.map((server) => (
           <SortableGridServerCard
             key={server.id}

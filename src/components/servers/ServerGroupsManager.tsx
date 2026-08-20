@@ -62,12 +62,24 @@ function GroupBucket({
   name,
   count,
   isUngrouped,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
+  onRename,
+  onDelete,
   children,
 }: {
   droppableId: string;
   name: string;
   count: number;
   isUngrouped: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onRename?: () => void;
+  onDelete?: () => void;
   children: React.ReactNode;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
@@ -75,20 +87,62 @@ function GroupBucket({
     <div
       ref={setNodeRef}
       className={cn(
-        "rounded-lg border transition-colors",
+        "flex flex-col rounded-lg border transition-colors",
         isOver
           ? "border-cursor-orange/40 bg-cursor-orange/[0.04]"
           : "border-[var(--fg-08)] bg-surface-200/40",
       )}
     >
-      <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <GripVertical className="h-3.5 w-3.5 shrink-0 text-[var(--fg-30)]" />
-          <span className="font-headline text-sm font-medium text-cursor-dark truncate">
-            {name}
-          </span>
-          <span className="text-xs text-[var(--fg-40)] tabular-nums">{count}</span>
-        </div>
+      <div className="flex items-center gap-1 px-3 py-2">
+        <GripVertical className="h-4 w-4 shrink-0 text-[var(--fg-30)]" />
+        <span className="font-headline text-sm font-medium text-cursor-dark truncate">{name}</span>
+        <span className="text-xs text-[var(--fg-40)] tabular-nums">{count}</span>
+        {!isUngrouped && onMoveUp && onMoveDown && onRename && onDelete ? (
+          <div className="ml-auto flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              disabled={!canMoveUp}
+              onClick={onMoveUp}
+              aria-label={`Move ${name} up`}
+              title={`Move ${name} up`}
+            >
+              <ArrowUp className="h-[18px] w-[18px]" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              disabled={!canMoveDown}
+              onClick={onMoveDown}
+              aria-label={`Move ${name} down`}
+              title={`Move ${name} down`}
+            >
+              <ArrowDown className="h-[18px] w-[18px]" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              onClick={onRename}
+              aria-label={`Rename ${name}`}
+              title={`Rename ${name}`}
+            >
+              <Pencil className="h-[18px] w-[18px]" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 text-[var(--fg-45)] hover:text-error-warm hover:bg-error-warm/10"
+              onClick={onDelete}
+              aria-label={`Delete ${name}`}
+              title={`Delete ${name}`}
+            >
+              <Trash2 className="h-[18px] w-[18px]" />
+            </Button>
+          </div>
+        ) : null}
       </div>
       <div className="px-2 pb-2 max-h-64 overflow-auto">
         {count === 0 ? (
@@ -171,18 +225,18 @@ export function ServerGroupsManager({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="max-w-2xl">
+      <AlertDialogContent className="max-w-4xl">
         <AlertDialogHeader>
           <div className="flex items-center justify-between">
             <AlertDialogTitle>Manage Groups</AlertDialogTitle>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-9 w-9"
               onClick={() => onOpenChange(false)}
               aria-label="Close"
             >
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5" />
             </Button>
           </div>
           <AlertDialogDescription>
@@ -262,7 +316,12 @@ export function ServerGroupsManager({
               count={byGroup.get(UNGROUPED_ID)?.length ?? 0}
               isUngrouped
             >
-              <div className="space-y-1">
+              <div
+                className="grid gap-1"
+                style={{
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100% / 3 - 4px, 140px), 1fr))",
+                }}
+              >
                 {(byGroup.get(UNGROUPED_ID) ?? []).map((server) => (
                   <DraggableServerChip key={server.id} server={server} />
                 ))}
@@ -287,12 +346,12 @@ function DraggableServerChip({ server }: { server: Server }) {
       {...attributes}
       {...listeners}
       className={cn(
-        "flex items-center gap-2 rounded-md border border-[var(--fg-08)] bg-surface-100 px-2 py-1.5 cursor-grab active:cursor-grabbing",
+        "flex items-center gap-1.5 rounded-md border border-[var(--fg-08)] bg-surface-100 px-2 py-1.5 cursor-grab active:cursor-grabbing min-w-0",
         isDragging && "opacity-60 ring-1 ring-cursor-orange/40",
       )}
     >
       <GripVertical className="h-3.5 w-3.5 shrink-0 text-[var(--fg-30)]" />
-      <span className="font-body text-xs text-cursor-dark truncate">{server.name}</span>
+      <span className="font-body text-xs text-cursor-dark truncate min-w-0">{server.name}</span>
     </div>
   );
 }
@@ -360,55 +419,22 @@ function ManagerGroupRow({
       name={group.name}
       count={servers.length}
       isUngrouped={false}
+      canMoveUp={canMoveUp}
+      canMoveDown={canMoveDown}
+      onMoveUp={onMoveUp}
+      onMoveDown={onMoveDown}
+      onRename={startRename}
+      onDelete={() => setDeleteOpen(true)}
     >
-      <div className="space-y-1">
+      <div
+        className="grid gap-1"
+        style={{
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100% / 3 - 4px, 140px), 1fr))",
+        }}
+      >
         {servers.map((server) => (
           <DraggableServerChip key={server.id} server={server} />
         ))}
-      </div>
-      <div className="mt-1 flex items-center justify-end gap-1 px-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          disabled={!canMoveUp}
-          onClick={onMoveUp}
-          aria-label={`Move ${group.name} up`}
-          title={`Move ${group.name} up`}
-        >
-          <ArrowUp className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          disabled={!canMoveDown}
-          onClick={onMoveDown}
-          aria-label={`Move ${group.name} down`}
-          title={`Move ${group.name} down`}
-        >
-          <ArrowDown className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={startRename}
-          aria-label={`Rename ${group.name}`}
-          title={`Rename ${group.name}`}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-[var(--fg-45)] hover:text-error-warm hover:bg-error-warm/10"
-          onClick={() => setDeleteOpen(true)}
-          aria-label={`Delete ${group.name}`}
-          title={`Delete ${group.name}`}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
       </div>
 
       {/* Rename dialog */}
